@@ -43,7 +43,7 @@
   const uid = () => Date.now().toString(36) + '-' + Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('');
   const DEF = { defSetting: 'H', autolock: 2, prov: 'AB', curFac: null, favFac: [], customFac: [], bkEvery: 30, lastBackup: 0, bkSnooze: 0, abOn: false, abEvery: 60, abKeep: 24, abFmts: [], abZip: true, abPwMode: 'passcode', abNotes: false, abLoc: '',
     warnA: 60, warnR: 180, favSets: [], reviews: {}, revEdited: {}, holOff: [], holExtra: [],
-    favFno: [], recFno: [], customFno: [], favFcen: [], fcCarry: true, refCol: false, recRef: [], fcLast: null, premWarn: true, premMax: {} };   // v9o: Facility # / Functional centre favourites, recent, carry-down   // v5: timer warnings, code sets, review marks, holidays
+    favFno: [], recFno: [], customFno: [], favFcen: [], fcCarry: true, refCol: true, recRef: [], fcLast: null, premWarn: true, premMax: {} };   // v9o: Facility # / Functional centre favourites, recent, carry-down   // v5: timer warnings, code sets, review marks, holidays
   const kindOf = R.kindOf, clone = o => JSON.parse(JSON.stringify(o));
   let FAC = null;
   let S = null;            // in-memory decrypted state while unlocked: {encs, settings}
@@ -439,7 +439,7 @@
   // Name / MRN / notes / codes are encrypted with the entry (saveEnc). Never put them in URLs or console logs.
   const COLS_ALL = [['rn', '#'], ['name', 'Patient name'], ['mrn', 'MRN / PHN'], ['hc', 'H/C'], ['tin', 'In'], ['tout', 'Out'], ['min', 'Min'], ['u', 'Units'], ['fno', 'Facility #'], ['fcen', 'Functional centre'], ['fee', 'Fee code(s)'], ['mod1', 'Modifier code 1'], ['mod2', 'Modifier code 2'], ['dx', 'Dx (ICD-9)'], ['ref', 'Referring provider'], ['note', 'Billing notes'], ['act', '']];
   // v9r: Referring provider column (name + practitioner ID), off unless turned on in Settings
-  const refOn = () => !!(S && S.settings && S.settings.refCol);
+  const refOn = () => !!(S && S.settings && (S.settings.refColSet ? S.settings.refCol : true));   // v9s: on unless the user turned it off
   let COLS = COLS_ALL.filter(c => c[0] !== 'ref');
   const NAV_ALL = ['name', 'mrn', 'hc', 'tin', 'tout', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'ref', 'note'];
   function colsSync() { const on = refOn(); COLS = COLS_ALL.filter(c => on || c[0] !== 'ref'); NAV = NAV_ALL.filter(c => on || c !== 'ref'); }
@@ -1625,7 +1625,7 @@
   $('#eFcen').addEventListener('click', () => eFpOpen('fcen'));
   function fpSetUi() {
     if (!S || !$('#fpCard')) return; const st = S.settings;
-    $('#fcCarry').checked = st.fcCarry !== false; $('#refCol').checked = !!st.refCol;
+    $('#fcCarry').checked = st.fcCarry !== false; $('#refCol').checked = refOn();
     const fRow = (no, sec) => { const x = facInfo(no), nm = x ? x.n : customNm(no); return `<div class="fpsrow"><span><b>${esc(no)}</b> ${esc(nm || '')}${x ? ` <small class="muted">${esc(x.city)}</small>` : ' <small class="muted">not in listing</small>'}</span><button type="button" class="linkbtn sm" data-${sec}="${esc(no)}">${sec === 'unfav' ? 'Remove' : '☆ Favourite'}</button></div>`; };
     const fav = st.favFno || [], rec = (st.recFno || []).filter(n => !fav.includes(n));
     $('#fnoFavList').innerHTML = fav.length ? fav.map(n => fRow(n, 'unfav')).join('') : '<p class="small muted">None yet. Tap ☆ beside a facility in the Facility # list, or Add….</p>';
@@ -1635,7 +1635,7 @@
     $('#fpSrc').textContent = AHF ? ahfSrc() : 'Facility numbers and names: Alberta Health facility listing (loads when first used).';
   }
   $('#fcCarry').addEventListener('change', async () => { S.settings.fcCarry = $('#fcCarry').checked; await saveSettings(); });
-  $('#refCol').addEventListener('change', async () => { S.settings.refCol = $('#refCol').checked; await saveSettings(); colsSync(); $('#todayList').innerHTML = ''; histStale = true; render(); toast(S.settings.refCol ? 'Referring provider column on' : 'Referring provider column off (saved names stay with each entry)'); });
+  $('#refCol').addEventListener('change', async () => { S.settings.refCol = $('#refCol').checked; S.settings.refColSet = true; await saveSettings(); colsSync(); { const tw = $('#todayList .gwrap'), ae = document.activeElement; if (tw) { if (ae && tw.contains(ae)) ae.blur(); tw.innerHTML = ''; } } histStale = true; render(); requestAnimationFrame(() => { if (!S) return; if (fillRows() !== fillRows.last) render(true); else fitAll(); sizeGrid(); const t = $('#todayList table.grid'), w = t && t.closest('.gwrap'); let g = 0; while (t && w && g++ < 5 && t.offsetHeight < w.clientHeight + 60) growGrid(t); }); /* v9s: refill like a text-size change (a shorter header must not leave the frame short); the frame is kept (its height decides how many empty rows fill it); render() redraws the table with the new columns */ toast(S.settings.refCol ? 'Referring provider column on' : 'Referring provider column off (saved names stay with each entry)'); });
   $('#fpCard').addEventListener('click', async ev => {
     const t = ev.target, st = S && S.settings; if (!st) return;
     if (t.dataset.unfav) { st.favFno = (st.favFno || []).filter(n => n !== t.dataset.unfav); await saveSettings(); return fpSetUi(); }
@@ -1764,7 +1764,7 @@
   // proportions (MRN and the time / number columns stay compact); when the window is too narrow for the fitted widths, the
   // text columns give back width down to these minimums (ch) and their text wraps instead (no sideways scrolling at 1280+).
   const GROW = { ref: 0.8, name: 1.2, mrn: 0, fno: 0.8, fcen: 0.5, fee: 1, mod1: 0.7, mod2: 0.7, dx: 1, note: 1.5 };
-  const CMIN = { ref: 7, name: 11, mrn: 11, fno: 7, fcen: 6.5, fee: 11, mod1: 9, mod2: 9, dx: 10, note: 9 };
+  const CMIN = { ref: 5.5, name: 11, mrn: 11, fno: 7, fcen: 6.5, fee: 11, mod1: 9, mod2: 9, dx: 10, note: 9 };
   const WIDEFIT = (ww, touch) => !touch && ww >= 900;
   function fitPx(key, need, ch, ww, touch) {
     const cfg = FIT[key], mn = cfg[touch ? 1 : 0] * ch; let max = cfg[2] * ch;

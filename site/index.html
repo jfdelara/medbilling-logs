@@ -165,7 +165,7 @@
     <div class="card" id="fpCard">
       <h3>Facility # and Functional centre</h3>
       <label class="chk small"><input type="checkbox" id="fcCarry" checked> New rows start with the Facility # and Functional centre picked last that day</label>
-      <label class="chk small"><input type="checkbox" id="refCol"> Show the Referring provider column (name and practitioner ID) on the Today and History sheets and in the entry window</label>
+      <label class="chk small"><input type="checkbox" id="refCol" checked> Show the Referring provider column (name and practitioner ID) on the Today and History sheets and in the entry window</label>
       <div class="fphead"><b>Favourite facilities</b> <span class="small muted">(shown first in the Facility # list)</span> <button type="button" class="linkbtn sm" id="fnoFavAdd">Add…</button></div>
       <div id="fnoFavList" class="fpslist"></div>
       <div class="fphead"><b>Recent facilities</b> <button type="button" class="linkbtn sm" id="fnoRecClear">Clear</button></div>
@@ -579,7 +579,7 @@
 <dialog id="manDlg" class="mandlg" aria-labelledby="manTitle">
   <div class="manhead"><h2 id="manTitle">MedBilling Logs · User manual</h2><button type="button" class="lockbtn" id="manClose">Close</button></div>
   <div class="man" id="manBody">
-    <p class="manlead">A private time and billing log for physicians. Everything stays on this device, encrypted with your passcode or passphrase. This manual works offline. Version 9r (October 2026).</p>
+    <p class="manlead">A private time and billing log for physicians. Everything stays on this device, encrypted with your passcode or passphrase. This manual works offline. Version 9s (October 2026).</p>
     <nav class="mantoc" aria-label="Contents">
       <a href="#m-start" data-go="m-start">1. Getting started, passcode and easy unlock</a>
       <a href="#m-per" data-go="m-per">2. The time-period bar</a>
@@ -736,7 +736,7 @@
       </ul>
       <h4>Rows never run out</h4>
       <p><b>Entry window (v9r):</b> tap or click a row number (or ⋯ → Open entry window, or Ctrl+Enter in a cell) to see every field of that encounter in one window: patient name, ULI / PHN or MRN, H/C, In / Out, Facility #, Functional centre, fee codes, modifiers, Dx, referring provider (when turned on) and billing notes. On a phone it fills the screen. Every field has a ▾ list of choices (favourites, recent values, the fee and ICD-9 searches, the facility and functional centre lists); you can always type instead. Save keeps the changes, Cancel drops them, Previous / Next save and move to the next patient. Details and segments are still under ⋯.</p>
-      <p><b>Referring provider (v9r):</b> Settings → Facility # and Functional centre → Show the Referring provider column. Type the name and practitioner ID (for example "Dr. A. Smith, 12345"). Off by default; names already saved stay with each entry and appear in exports.</p>
+      <p><b>Referring provider (v9r):</b> Settings → Facility # and Functional centre → Show the Referring provider column. Type the name and practitioner ID (for example "Dr. A. Smith, 12345"). On by default (turn it off here); names already saved stay with each entry and appear in exports.</p>
       <p><b>On a computer (v9q):</b> the app uses the whole browser window. The spreadsheet shares the width out so every column, from Patient name to Billing notes, is on screen without scrolling sideways (from about 1280 px wide; Edge or Chrome on a 1920 × 1080 or 1366 × 768 monitor). On a wide monitor the name, facility, code and notes columns get the extra room; In, Out, Min, Units, H/C and MRN stay compact. In a smaller window those text columns wrap onto two or more lines instead (a code is never split), and column headers may take two lines. iPhone and iPad look the same as before.</p>
       <p>The grid is endless. Whenever the cell you are in is within 5 rows of the last row, 10 more blank rows are added below; it doesn't matter how you got there (Tab, Enter, ↓, the <b>Next</b> bar, or a tap), and you don't have to type anything. Scrolling down adds up to 30 more by itself; then the footer (units rule, disclaimers, Fee Desk link and this manual) shows after the last row, and scrolling on past it adds 10 more rows each time (v9o). Row numbers simply continue (… 40, 41, 42 …), and your cursor, the text you're typing and the order of rows stay exactly where they were.</p>
       <ul>
