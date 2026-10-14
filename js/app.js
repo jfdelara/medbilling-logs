@@ -43,7 +43,7 @@
   const uid = () => Date.now().toString(36) + '-' + Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('');
   const DEF = { defSetting: 'H', autolock: 2, prov: 'AB', curFac: null, favFac: [], customFac: [], bkEvery: 30, lastBackup: 0, bkSnooze: 0, abOn: false, abEvery: 60, abKeep: 24, abFmts: [], abZip: true, abPwMode: 'passcode', abNotes: false, abLoc: '',
     warnA: 60, warnR: 180, favSets: [], reviews: {}, revEdited: {}, holOff: [], holExtra: [],
-    favFno: [], recFno: [], customFno: [], favFcen: [], fcCarry: true, fcLast: null, premWarn: true, premMax: {} };   // v9o: Facility # / Functional centre favourites, recent, carry-down   // v5: timer warnings, code sets, review marks, holidays
+    favFno: [], recFno: [], customFno: [], favFcen: [], fcCarry: true, refCol: false, recRef: [], fcLast: null, premWarn: true, premMax: {} };   // v9o: Facility # / Functional centre favourites, recent, carry-down   // v5: timer warnings, code sets, review marks, holidays
   const kindOf = R.kindOf, clone = o => JSON.parse(JSON.stringify(o));
   let FAC = null;
   let S = null;            // in-memory decrypted state while unlocked: {encs, settings}
@@ -326,6 +326,7 @@
     await V.save(e);
     await V.appendAudit({ action: action || (before ? 'edit' : 'create'), eid: e.id, kind: e.kind, before, after: clone(e), note: note || undefined });
     undoRec(before, clone(e), note, action);
+    if (refDirty) { refDirty = false; await saveSettings(); }
     if (!quiet) await reviewTouch([before, e], `${R.KIND[e.kind] || 'entry'} ${action || 'edit'} after review`);
   }
   // defer: keep the photos for a few seconds so Undo can bring the entry back whole (removed on timeout or lock)
@@ -436,8 +437,13 @@
   // One component: a real <table class="grid"> with a grey header row, grey row numbers, gridlines on every cell, blank rows
   // below the real ones (typing in one creates the encounter), a totals row, and Sheets-style keyboard navigation.
   // Name / MRN / notes / codes are encrypted with the entry (saveEnc). Never put them in URLs or console logs.
-  const COLS = [['rn', '#'], ['name', 'Patient name'], ['mrn', 'MRN / PHN'], ['hc', 'H/C'], ['tin', 'In'], ['tout', 'Out'], ['min', 'Min'], ['u', 'Units'], ['fno', 'Facility #'], ['fcen', 'Functional centre'], ['fee', 'Fee code(s)'], ['mod1', 'Modifier code 1'], ['mod2', 'Modifier code 2'], ['dx', 'Dx (ICD-9)'], ['note', 'Billing notes'], ['act', '']];
-  const NAV = ['name', 'mrn', 'hc', 'tin', 'tout', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'note'];   // v9o: Facility #, Functional centre before Fee code(s)
+  const COLS_ALL = [['rn', '#'], ['name', 'Patient name'], ['mrn', 'MRN / PHN'], ['hc', 'H/C'], ['tin', 'In'], ['tout', 'Out'], ['min', 'Min'], ['u', 'Units'], ['fno', 'Facility #'], ['fcen', 'Functional centre'], ['fee', 'Fee code(s)'], ['mod1', 'Modifier code 1'], ['mod2', 'Modifier code 2'], ['dx', 'Dx (ICD-9)'], ['ref', 'Referring provider'], ['note', 'Billing notes'], ['act', '']];
+  // v9r: Referring provider column (name + practitioner ID), off unless turned on in Settings
+  const refOn = () => !!(S && S.settings && S.settings.refCol);
+  let COLS = COLS_ALL.filter(c => c[0] !== 'ref');
+  const NAV_ALL = ['name', 'mrn', 'hc', 'tin', 'tout', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'ref', 'note'];
+  function colsSync() { const on = refOn(); COLS = COLS_ALL.filter(c => on || c[0] !== 'ref'); NAV = NAV_ALL.filter(c => on || c !== 'ref'); }
+  let NAV = NAV_ALL.filter(c => c !== 'ref');   // v9o: Facility #, Functional centre before Fee code(s)
   const FPC = { fno: 1, fcen: 1 };   // v9o picker cells (Facility #, Functional centre)
   // v9k: two modifier-code columns after Fee code(s); each cell may hold several codes (stored normalised: "CMGP, BMI")
   const modOf = (e, n) => R.modTxt(e, n), MOD_MAX = 200, CODE_MAX = 200;   // v9m: room for 10+ codes with separators (was 80 / 60)
@@ -465,11 +471,11 @@
     const m = v.match(/^(\d{1,2})[:h.\s]?(\d{2})$/) || v.match(/^(\d{1,2})$/); if (!m) return null;
     const h = +m[1], mi = m[2] ? +m[2] : 0; return h > 23 || mi > 59 ? null : [h, mi];
   }
-  const gColgroup = '<colgroup>' + COLS.map(c => `<col class="c-${c[0]}">`).join('') + '</colgroup>';
-  const gHead = '<thead><tr>' + COLS.map(c => `<th scope="col" class="h-${c[0]}" data-h="${c[0]}"${c[0] === 'act' ? ' aria-label="Row actions"' : ''}${/^mod/.test(c[0]) ? ' title="Modifier code(s); separate several with a comma or space"' : c[0] === 'fno' ? ' title="AHCIP facility number (Alberta Health facility listing). Tap to pick; favourites first"' : c[0] === 'fcen' ? ' title="Functional centre (CLNC, D/N, EMRG, MED, SURG…). Tap to pick"' : ''}>${esc(c[1])}</th>`).join('') + '</tr></thead>';
+  const gColgroupF = () => '<colgroup>' + COLS.map(c => `<col class="c-${c[0]}">`).join('') + '</colgroup>';
+  const gHeadF = () => '<thead><tr>' + COLS.map(c => `<th scope="col" class="h-${c[0]}" data-h="${c[0]}"${c[0] === 'act' ? ' aria-label="Row actions"' : ''}${/^mod/.test(c[0]) ? ' title="Modifier code(s); separate several with a comma or space"' : c[0] === 'fno' ? ' title="AHCIP facility number (Alberta Health facility listing). Tap to pick; favourites first"' : c[0] === 'fcen' ? ' title="Functional centre (CLNC, D/N, EMRG, MED, SURG…). Tap to pick"' : c[0] === 'ref' ? ' title="Referring provider: name and practitioner ID (type &quot;Name, 12345&quot;)"' : ''}>${esc(c[1])}</th>`).join('') + '</tr></thead>';
   // v9f: name, fee, dx and notes wrap (auto-growing textarea, height set by autoH after the widths are fitted), the rest stay one line.
   // Every editor has enterkeyhint="next": the phone's return key moves to the next cell, exactly like Tab / Enter.
-  const WRAP = { name: 1, fee: 1, mod1: 1, mod2: 1, dx: 1 };   // v9i: Billing notes is a preview + notes editor; v9k: modifiers wrap too
+  const WRAP = { name: 1, fee: 1, mod1: 1, mod2: 1, dx: 1, ref: 1 };   // v9i: Billing notes is a preview + notes editor; v9k: modifiers wrap too
   const gAttrs = (c, o) => `class="gc${o.mono ? ' mono' : ''}" data-c="${c}" maxlength="${o.max || 80}"${o.ph ? ` placeholder="${esc(o.ph)}"` : ''} aria-label="${esc(o.lbl)}"${o.title ? ` title="${esc(o.title)}"` : ''} autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="next"${o.im ? ` inputmode="${o.im}"` : ''}${o.cap ? ` autocapitalize="${o.cap}"` : ''}`;
   // v9i: Billing notes shows a one-line preview; tapping / clicking it (or typing on it) opens the notes editor.
   // On narrow screens Patient name is a one-line field (ellipsis); the full name shows in a bubble while it has focus.
@@ -480,6 +486,8 @@
   const hcBtn = (v, lbl) => `<button type="button" class="gc hc" data-c="hc" aria-label="${esc(lbl)}: ${R.SET[v]}. Tap to switch" title="${R.SET[v]} (tap, or type H / C)">${v}</button>`;
   // v9p: Modifier code 1 / 2 open Fee Desk on its Modifiers tab too; what comes back goes into the cell it was opened from
   const modPick = (n, blank) => `<button type="button" class="cbtn hov pickfd" data-kind="mod${n}" tabindex="-1" title="${blank ? 'New row: pick' : 'Pick'} a modifier in Fee Desk (tap one there and it comes back to Modifier code ${n})" aria-label="${blank ? 'New row, pick' : 'Pick'} modifier ${n} in Fee Desk">↗</button>`;
+  // v9r: ⤢ in the Patient name cell (shows on hover / on the selected row) opens the entry window; not counted in column fitting
+  const EW_BTN = '<button type="button" class="rew" data-a="ew" tabindex="-1" aria-label="Open the entry window (every field of this row)" title="Open the entry window: every field of this row (Ctrl+Enter)">⤢</button>';
   function gridRow(e, i, sp) {
     const k = kindOf(e), st = e.status, ms = R.msOf(e), m = Math.floor(ms / 60000), cs = e.codes || [], dx = R.dxList(e);
     const started = e.segs.length > 0, en = R.endOf(e), open = started && en == null, ed = k !== 'shift', id = esc(e.id);
@@ -501,7 +509,7 @@
     const spCls = sp && sp.g ? ' spg' + (sp.c ? ' spc' : '') + (sp.n ? ' spn' : '') : '', spOk = ed && (nameVal || mrnVal);   // v9p: same-patient rows grouped
     return `<tr class="gr ${st} k-${k}${wl ? ' w' + wl : ''}${spCls}" data-key="${id}" data-id="${id}">`
       + `<th scope="row" class="rn" title="Row ${i}. Right-click or press and hold for actions">${st === 'run' || st === 'pause' ? `<i class="dot ${st}" aria-label="${st === 'run' ? 'Running' : 'Paused'}"></i>` : ''}${i}${spOk ? `<button type="button" class="spb" data-a="same" tabindex="-1" aria-label="Same patient: add an encounter row below" title="Same patient: new row below with the name, MRN / PHN, facility, functional centre and H/C (times and codes blank)"><b aria-hidden="true">＋</b><small aria-hidden="true">same</small></button>` : ''}</th>`
-      + `<td class="c-name"><div class="cw">${name}${tags}</div></td>`
+      + `<td class="c-name"><div class="cw">${name}${tags}${ed ? EW_BTN : ''}</div></td>`
       + `<td class="c-mrn">${ed ? gInp('mrn', mrnVal, { lbl: 'MRN or PHN', mono: 1, max: 24 }) : ''}</td>`
       + `<td class="c-hc">${ed ? hcBtn(e.setting === 'C' ? 'C' : 'H', 'Hospital or clinic') : '<span class="gtxt mid">–</span>'}</td>`
       + `<td class="c-tin"><div class="cw">${tin}</div></td>`
@@ -512,6 +520,7 @@
       + `<td class="c-fee"><div class="cw">${fee}</div></td>`
       + `<td class="c-mod1">${modc(1)}</td><td class="c-mod2">${modc(2)}</td>`
       + `<td class="c-dx"><div class="cw">${dxc}</div></td>`
+      + (refOn() ? `<td class="c-ref">${ed ? gInp('ref', refTxt(e), { lbl: 'Referring provider (name, practitioner ID)', max: 120, title: refTxt(e) }) : ''}</td>` : '')
       + `<td class="c-note">${ed ? gInp('note', billingNoteOf(e), { lbl: 'Billing notes', max: 500 }) : ''}</td>`
       + `<td class="c-act"><button type="button" class="rmore" data-a="more" tabindex="-1" aria-label="Row actions" title="Timer, add time, segments and photos, same patient, delete">⋯</button></td></tr>`;
   }
@@ -525,7 +534,7 @@
   const perTxtOf = e => { const p = R.periodSplit(e).parts.filter(x => !R.PBY[x.id].regular); return p.length ? R.perTxt(p, true) : ''; };
   // v9h: rows far below the work area are "light": the same cells without editors (hundreds of empty textareas would slow
   // every keystroke). A light row gets its editors the moment the cursor moves to it or it is tapped (lightUp).
-  const lightRow = i => `<tr class="gr blank light" data-key="r${i}" data-blank="1" data-light="1"><th scope="row" class="rn">${i}</th><td class="c-name"></td><td class="c-mrn"></td><td class="c-hc dim"></td><td class="c-tin"></td><td class="c-tout"></td><td class="num c-min"></td><td class="num c-u"></td><td class="c-fno"></td><td class="c-fcen"></td><td class="c-fee"></td><td class="c-mod1"></td><td class="c-mod2"></td><td class="c-dx"></td><td class="c-note"></td><td class="c-act"></td></tr>`;
+  const lightRow = i => `<tr class="gr blank light" data-key="r${i}" data-blank="1" data-light="1"><th scope="row" class="rn">${i}</th><td class="c-name"></td><td class="c-mrn"></td><td class="c-hc dim"></td><td class="c-tin"></td><td class="c-tout"></td><td class="num c-min"></td><td class="num c-u"></td><td class="c-fno"></td><td class="c-fcen"></td><td class="c-fee"></td><td class="c-mod1"></td><td class="c-mod2"></td><td class="c-dx"></td>${refOn() ? '<td class="c-ref"></td>' : ''}<td class="c-note"></td><td class="c-act"></td></tr>`;
   function lightUp(tr) {
     if (!tr || !tr.dataset.light) return tr;
     const tpl = document.createElement('template'); tpl.innerHTML = '<table><tbody>' + blankRow(tr.sectionRowIndex + 1, false) + '</tbody></table>';
@@ -549,6 +558,7 @@
       + `<td class="c-mod1"><div class="cw mucw">${gInp('mod1', '', { lbl: 'Modifier code(s) 1 (new row)', mono: 1, max: MOD_MAX, cap: 'characters' })}${modPick(1, true)}</div></td>`
       + `<td class="c-mod2"><div class="cw mucw">${gInp('mod2', '', { lbl: 'Modifier code(s) 2 (new row)', mono: 1, max: MOD_MAX, cap: 'characters' })}${modPick(2, true)}</div></td>`
       + `<td class="c-dx"><div class="cw">${gInp('dx', '', { lbl: 'Diagnostic code(s) (new row)', mono: 1, max: CODE_MAX, cap: 'characters' })}<button type="button" class="cbtn hov pickfd" data-kind="dx" tabindex="-1" title="New row: pick an ICD-9 code in Fee Desk (it comes back to this cell)" aria-label="New row, pick diagnostic code in Fee Desk">↗</button></div></td>`
+      + (refOn() ? `<td class="c-ref">${gInp('ref', '', { lbl: 'Referring provider (new row)', max: 120 })}</td>` : '')
       + `<td class="c-note">${gInp('note', '', { lbl: 'Billing notes (new row)', max: 500 })}</td><td class="c-act"></td></tr>`;
   }
   // v9p: which rows are the same patient: linked by "Same patient" (e.pt), or the same MRN / PHN typed on both
@@ -573,7 +583,7 @@
   const linesHtml = l => l.map(x => `<span>${esc(x)}</span>`).join('');
   function gFoot(list, day) {
     const t = gTotals(list, day);
-    return `<tfoot><tr class="gt"><th scope="row" class="rn" aria-label="Totals">Σ</th><td class="c-name"><span class="gtxt" data-tn>${t.n} encounter${t.n === 1 ? '' : 's'}${t.p < t.n ? ` · ${t.p} patient${t.p === 1 ? '' : 's'}` : ''}</span></td><td></td><td></td><td></td><td class="tl"><span class="gtxt">Total</span></td><td class="num" data-tm title="Total time (hours and minutes)">${t.mTxt}</td><td class="num" data-tu title="Total units">${t.u}</td><td colspan="7" class="tdet"><span class="gtxt" data-td>${esc(t.det)}</span></td><td></td></tr>`
+    return `<tfoot><tr class="gt"><th scope="row" class="rn" aria-label="Totals">Σ</th><td class="c-name"><span class="gtxt" data-tn>${t.n} encounter${t.n === 1 ? '' : 's'}${t.p < t.n ? ` · ${t.p} patient${t.p === 1 ? '' : 's'}` : ''}</span></td><td></td><td></td><td></td><td class="tl"><span class="gtxt">Total</span></td><td class="num" data-tm title="Total time (hours and minutes)">${t.mTxt}</td><td class="num" data-tu title="Total units">${t.u}</td><td colspan="${refOn() ? 8 : 7}" class="tdet"><span class="gtxt" data-td>${esc(t.det)}</span></td><td></td></tr>`
       + `<tr class="gts"${t.lines.length ? '' : ' hidden'}><td colspan="${COLS.length}" class="tsum"><div class="tsumi" data-tl aria-label="Totals by setting and time period">${linesHtml(t.lines)}</div></td></tr></tfoot>`;
   }
   function sumFit(t) {   // the lines block spans the visible width; the totals row sits right above it (both pinned on Today)
@@ -581,13 +591,14 @@
     const vw = w.clientWidth + 'px', hh = h + 'px'; if (w.style.getPropertyValue('--gvw') !== vw) w.style.setProperty('--gvw', vw); if (w.style.getPropertyValue('--tsh') !== hh) w.style.setProperty('--tsh', hh);
   }
   function sheetHtml(list, o) {
+    colsSync();
     let rows = '';
     const lf = o.lightFrom || Infinity, lt = i => i >= lf && 'r' + i !== o.keepKey;   // v9h: light rows (no editors) from row lightFrom on
     const disp = o.seq || list, pk = ptKeys(list), cnt = new Map(); list.forEach(e => cnt.set(pk.get(e.id), (cnt.get(pk.get(e.id)) || 0) + 1));
     const spOf = i => { const e = disp[i], k = e && pk.get(e.id); if (!k || cnt.get(k) < 2) return null; const a = disp[i - 1], b = disp[i + 1]; return { g: 1, c: !!(a && pk.get(a.id) === k), n: !!(b && pk.get(b.id) === k) }; };
     if (o.seq) { const fb = o.seq.indexOf(null); o.seq.forEach((e, i) => { rows += e ? gridRow(e, i + 1, spOf(i)) : blankRow(i + 1, i === fb, lt(i + 1)); }); }   // v9f: rows kept where they are while editing
     else { rows = list.map((e, i) => gridRow(e, i + 1, spOf(i))).join(''); for (let j = 0; j < (o.blank || 0); j++) rows += blankRow(list.length + j + 1, j === 0, lt(list.length + j + 1)); }
-    return `<table class="grid${o.main ? ' main' : ''}" data-day="${esc(o.day)}" aria-label="${esc((o.main ? 'Spreadsheet for ' : '') + R.fmtDay(o.day))}">${gColgroup}${gHead}<tbody>${rows}</tbody>${gFoot(list, o.day)}</table>`;
+    return `<table class="grid${o.main ? ' main' : ''}" data-day="${esc(o.day)}" aria-label="${esc((o.main ? 'Spreadsheet for ' : '') + R.fmtDay(o.day))}">${gColgroupF()}${gHeadF()}<tbody>${rows}</tbody>${gFoot(list, o.day)}</table>`;
   }
   // rows shown for a day: Today also keeps running / paused entries from earlier days at the top
   function dayList(day, main) {
@@ -698,6 +709,8 @@
     if (f === 'name') { if ((e.name || '') === v) return null; e.name = v; return 'Patient name edited in spreadsheet'; }
     if (f === 'mrn') { if (ptMrn(e) === v) return null; setMrn(e, v); return 'MRN/PHN edited in spreadsheet'; }
     if (f === 'note') { if ((e.billingNote || '') === v) return null; e.billingNote = v; return 'Billing note edited in spreadsheet'; }
+    if (f === 'ref') { const r = parseRef(v); return applyRef(e, r.n, r.id); }
+    if (f === 'refObj') return applyRef(e, raw && raw.n, raw && raw.id);
     if (f === 'hc') { const nv = v === 'C' ? 'C' : 'H'; if (e.setting === nv) return null; e.setting = nv; return `Setting changed to ${R.SET[nv]} in spreadsheet`; }
     if (f === 'tin' || f === 'tout') return applyTime(e, f, v, day);
     if (f === 'mod1' || f === 'mod2') {   // v9k: several codes per cell, separated by commas or spaces; saved upper-case, no duplicates
@@ -736,6 +749,25 @@
       return 'Diagnostic code(s) edited in spreadsheet';
     }
     return null;
+  }
+  // v9r: Referring provider (e.refNm, e.refId; encrypted with the entry like every other field)
+  let refDirty = false;
+  const refTxt = e => [e && e.refNm, e && e.refId].filter(Boolean).join(', ');
+  function parseRef(v) {
+    v = String(v || '').trim(); if (!v) return { n: '', id: '' };
+    let m = /^(.*?)[\s,;·#]+(\d{3,12})$/.exec(v); if (m) return { n: m[1].replace(/[\s,;·#]+$/, '').trim(), id: m[2] };
+    if (/^\d{3,12}$/.test(v)) return { n: '', id: v };
+    m = /^(\d{3,12})[\s,;·#]+(.+)$/.exec(v); if (m) return { n: m[2].trim(), id: m[1] };
+    return { n: v, id: '' };
+  }
+  function applyRef(e, n, id) {
+    n = String(n || '').trim().slice(0, 80); id = String(id || '').replace(/\s+/g, '').slice(0, 12);
+    if (id && !/^\d+$/.test(id)) throw uerr('The practitioner ID is digits only');
+    if ((e.refNm || '') === n && (e.refId || '') === id) return null;
+    if (n) e.refNm = n; else delete e.refNm; if (id) e.refId = id; else delete e.refId;
+    if (S && (n || id)) refDirty = true;
+    if (S && (n || id)) S.settings.recRef = [{ n, id }].concat((S.settings.recRef || []).filter(x => !(x.n === n && x.id === id))).slice(0, 12);
+    return n || id ? `Referring provider set (${[n, id].filter(Boolean).join(', ')})` : 'Referring provider cleared';
   }
   const dxxHtml = e => R.dxExtra(e).map(x => `<span class="sc"><span class="dxc">Dx ${esc(x)}</span></span>`).join('');   // v9m: more Dx than fee codes
   function setDxx(e, list) { const l = (list || []).filter(Boolean); if (l.length) e.dxx = l; else delete e.dxx; }
@@ -872,11 +904,11 @@
     });
   }
   function bindGrid(root) {
-    let lpT = null;
+    let lpT = null, lpDone = false;
     root.addEventListener('pointerdown', ev => {
       const c = ev.target.closest('.gc'); gMouse = c || null;
       const rn = ev.target.closest('tbody .rn'); clearTimeout(lpT);
-      if (rn) lpT = setTimeout(() => { const e = entryOf(rn); if (e) openRowMenu(e); }, 550);
+      lpDone = false; if (rn) lpT = setTimeout(() => { const e = entryOf(rn); if (e) { lpDone = true; openRowMenu(e); } }, 550);
     }, true);
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(n => root.addEventListener(n, () => clearTimeout(lpT)));
     // v9h: a mouse over a light empty row gives it its editors, so the hover buttons (▶, ↗) show as on any row
@@ -912,6 +944,7 @@
       const c = ev.target.closest && ev.target.closest('.gc'); if (!c || ev.isComposing) return;
       const isIn = c.tagName === 'INPUT' || c.tagName === 'TEXTAREA', k = ev.key; gShiftEnter = k === 'Enter' && ev.shiftKey;
       if (k === 'Tab') { ev.preventDefault(); commitCell(c); return gMove(c, 0, ev.shiftKey ? -1 : 1, true); }
+      if (k === 'Enter' && (ev.ctrlKey || ev.metaKey) && c.dataset.c !== 'note') { ev.preventDefault(); commitCell(c); const tr = c.closest('tr'); return ewOpen(tr); }   // v9r
       if (k === 'Enter') {
         ev.preventDefault(); commitCell(c); return gMove(c, 0, ev.shiftKey ? -1 : 1, true);   // Enter = next cell to the right (Shift+Enter = left)
       }
@@ -964,10 +997,13 @@
         if (a.dataset.a === 'now') { if (tr.dataset.blank) createFromBlank(tr, 'tin', 'now'); else if (e) gridSave(e.id, 'tin', 'now'); return; }
         if (a.dataset.a === 'stop' && e) return act(e, 'stop');
         if (a.dataset.a === 'more' && e) return openRowMenu(e);
+        if (a.dataset.a === 'ew' && tr) return ewOpen(tr);   // v9r
         if (a.dataset.a === 'same' && e) { if (ev.detail > 1) return; if (!matchMedia('(pointer:fine)').matches) return sameRow(e); clearTimeout(spT); spT = setTimeout(() => sameRow(e), 280); return; }   // with a mouse, wait: a double-click on the row number opens the details instead
         return;
       }
       if (t.closest('a, input, textarea, button')) return;
+      const rnc = t.closest('tbody th.rn');   // v9r: the row number opens the entry window (every field of the row)
+      if (rnc) { if (lpDone) { lpDone = false; return; } const tr = rnc.closest('tr'); if (tr.dataset.light) lightUp(tr); return ewOpen(tr); }
       const td0 = t.closest('td, th.rn'); if (!td0) return;
       const ltr = td0.closest('tr'), ci = [...ltr.cells].indexOf(td0); if (ltr.dataset.light) lightUp(ltr);
       const td = ltr.cells[ci] || td0;
@@ -976,10 +1012,257 @@
       const c = td.querySelector('.gc') || (td.classList.contains('rn') && td.parentNode.querySelector('.gc')); if (c) { gMouse = (c.tagName === 'INPUT' || c.tagName === 'TEXTAREA') && !td.classList.contains('rn') ? c : null; c.focus(); if (!gMouse && c.select) c.select(); }
     });
     root.addEventListener('mousedown', ev => { if (ev.target.closest && ev.target.closest('.spb')) ev.preventDefault(); });   // v9p: the cell keeps focus, so the row stays selected
-    root.addEventListener('dblclick', ev => { const rn = ev.target.closest('tbody .rn'); if (rn) clearTimeout(spT); if (rn) { const e = entryOf(rn); if (e) openEdit(e); } });
+    root.addEventListener('dblclick', ev => { if (ew || $('#ewDlg').open) return; const rn = ev.target.closest('tbody .rn'); if (rn) clearTimeout(spT); if (rn) { const e = entryOf(rn); if (e) openEdit(e); } });
     root.addEventListener('contextmenu', ev => { if (ev.target.closest('input')) return; const e = entryOf(ev.target); if (!e) return; ev.preventDefault(); openRowMenu(e); });
   }
   bindGrid($('#todayList')); bindGrid($('#histList'));
+
+  // ============================================================ v9r entry window (one row, every field)
+  // Tap / click a row number (or ⋯ → Open entry window, or Ctrl+Enter in a cell) to see and edit every column of that
+  // encounter in one window: a centred window on a computer, a full-screen sheet on a phone. Save / Cancel / Previous / Next.
+  // Every field has a ▾ list of choices (favourites, recent values, the code searches and the Facility # / Functional centre
+  // lists) and still takes typing. Values go through the same applyCell() as the spreadsheet, so the rules, encryption,
+  // audit log and Undo are the same. The layout is the EW_LAYOUT list below: reorder / regroup it to match another EMR's screen.
+  const EW_LAYOUT = [
+    { g: 'Patient', f: [{ k: 'name', l: 'Patient name', span: 2 }, { k: 'mrn', l: 'ULI / PHN or MRN', mono: 1 }, { k: 'hc', l: 'Hospital / Clinic', sel: [['H', 'H · Hospital'], ['C', 'C · Clinic']] }] },
+    { g: 'Time', f: [{ k: 'tin', l: 'In (24 h)', mono: 1, im: 'numeric', ph: 'HH:MM' }, { k: 'tout', l: 'Out (24 h)', mono: 1, im: 'numeric', ph: 'HH:MM' }, { k: 'mu', l: 'Min · Units', ro: 1 }] },
+    { g: 'Facility', f: [{ k: 'fno', l: 'Facility #', mono: 1, im: 'numeric', pk: 'fno' }, { k: 'fcen', l: 'Functional centre', mono: 1, cap: 'characters', pk: 'fcen' }] },
+    { g: 'Billing', f: [{ k: 'fee', l: 'Fee code(s)', mono: 1, cap: 'characters', multi: 1, fd: 'fee', span: 2 }, { k: 'mod1', l: 'Modifier code 1', mono: 1, cap: 'characters', multi: 1, fd: 'mod1' }, { k: 'mod2', l: 'Modifier code 2', mono: 1, cap: 'characters', multi: 1, fd: 'mod2' }, { k: 'dx', l: 'Dx (ICD-9)', mono: 1, cap: 'characters', multi: 1, fd: 'dx', span: 2 }] },
+    { g: 'Referring provider', ref: 1, f: [{ k: 'refNm', l: 'Referring provider name' }, { k: 'refId', l: 'Practitioner ID', mono: 1, im: 'numeric' }] },
+    { g: 'Notes', f: [{ k: 'note', l: 'Billing notes', ta: 1, span: 4 }] }];
+  const EW_SAVE = ['name', 'mrn', 'hc', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'ref', 'note', 'tin', 'tout'];   // fee before Dx, In before Out
+  const COMMON_MODS = ['CMGP', 'BMI', 'BMIPRO', 'TEV', 'TNTP', 'TNTA', 'TWK', 'TST', 'TDES', 'CMXV15', 'CMXV20', 'CMXV30', 'CMXC30', 'SURT', 'ANE', 'ASST', 'LOCI', 'COMP'];
+  let ew = null;
+  const ewF = k => $('#ew_' + k);
+  const ewFields = () => EW_LAYOUT.filter(g => !g.ref || refOn()).flatMap(g => g.f).filter(f => !f.ro);
+  function ewVals(e) {
+    if (!e) return { name: '', mrn: '', hc: quickSet || 'H', tin: '', tout: '', fno: '', fcen: '', fee: '', mod1: '', mod2: '', dx: '', refNm: '', refId: '', note: '' };
+    const st = e.segs.length > 0, en = R.endOf(e);
+    return { name: ptName(e) || '', mrn: ptMrn(e) || '', hc: e.setting === 'C' ? 'C' : 'H', tin: st ? R.hm(R.startOf(e)) : '', tout: st && en != null ? R.hm(en) : '', fno: facNoOf(e) || '', fcen: fcenOf(e) || '',
+      fee: (e.codes || []).map(c => c.c).join(', '), mod1: modOf(e, 1) || '', mod2: modOf(e, 2) || '', dx: R.dxList(e).join(', '), refNm: e.refNm || '', refId: e.refId || '', note: billingNoteOf(e) || '' };
+  }
+  function ewHtml() {
+    return EW_LAYOUT.filter(g => !g.ref || refOn()).map(g => `<fieldset class="ewg"><legend>${esc(g.g)}</legend><div class="ewgrid">` + g.f.map(f => {
+      if (f.ro) return `<div class="ewf ro${f.span ? ' sp' + f.span : ''}"><span class="ewl">${esc(f.l)}</span><output id="ew_${f.k}" class="ewro mono"></output></div>`;
+      const id = 'ew_' + f.k, a = `id="${id}" name="${f.k}" data-k="${f.k}" class="ewi${f.mono ? ' mono' : ''}" autocomplete="off" autocorrect="off" spellcheck="false" aria-autocomplete="list" aria-controls="ewMenu"${f.im ? ` inputmode="${f.im}"` : ''}${f.cap ? ` autocapitalize="${f.cap}"` : ''}${f.ph ? ` placeholder="${esc(f.ph)}"` : ''}`;
+      const inp = f.sel ? `<select id="${id}" name="${f.k}" data-k="${f.k}" class="ewi">${f.sel.map(o => `<option value="${o[0]}">${esc(o[1])}</option>`).join('')}</select>`
+        : f.ta ? `<textarea rows="3" maxlength="500" ${a}></textarea>` : `<input maxlength="${f.multi ? 200 : 120}" ${a}>`;
+      const dd = f.sel ? '' : `<button type="button" class="ewdd" data-dd="${f.k}" tabindex="-1" aria-label="Choices for ${esc(f.l)}" title="Choices (Alt+↓)">▾</button>`;
+      const ex = f.pk ? `<button type="button" class="ewx" data-pk="${f.pk}" tabindex="-1" title="Open the full ${esc(f.l)} list (favourites first)">List…</button>`
+        : f.fd ? `<button type="button" class="ewx" data-fd="${f.fd}" tabindex="-1" title="Save, then pick in Fee Desk (the pick comes back to this row)">Fee Desk ↗</button>` : '';
+      return `<div class="ewf${f.span ? ' sp' + f.span : ''}" data-f="${f.k}"><label class="ewl" for="${id}">${esc(f.l)}</label><div class="ewin">${inp}${dd}${ex}</div></div>`;
+    }).join('') + '</div></fieldset>').join('');
+  }
+  // rows of the grid the window walks through (real encounters, then the first empty row = a new entry)
+  function ewRows(root, day) {
+    const t = root && root.querySelector(`table.grid[data-day="${CSS.escape(day)}"]`); if (!t) return [];
+    const out = []; let blank = null;
+    for (const tr of t.tBodies[0].rows) { if (tr.dataset.blank) { if (!blank) blank = tr; continue; } const e = entryOf(tr); if (e && kindOf(e) !== 'shift') out.push(tr); }
+    if (blank) out.push(blank); return out;
+  }
+  const ewTr = () => { if (!ew) return null; const t = ew.root.querySelector(`table.grid[data-day="${CSS.escape(ew.day)}"]`); if (!t) return null;
+    return ew.id ? t.querySelector(`tbody tr[data-id="${CSS.escape(ew.id)}"]`) : t.querySelector(`tbody tr[data-key="${CSS.escape(ew.key)}"]`) || t.querySelector('tbody tr[data-blank]'); };
+  function ewOpen(tr) {
+    if (!S || !tr) return; const root = tr.closest('#todayList, #histList'), t = tr.closest('table.grid'); if (!root || !t) return;
+    const e = tr.dataset.blank ? null : entryOf(tr); if (e && kindOf(e) === 'shift') return openEdit(e);
+    if (ned) nedClose(true); if (fpk) fpkClose();
+    const act = document.activeElement; if (act && act.classList && act.classList.contains('gc')) commitCell(act);
+    const go = () => {
+      const tr2 = e ? root.querySelector(`tr[data-id="${CSS.escape(e.id)}"]`) || tr : tr, e2 = e && S.encs.find(x => x.id === e.id);
+      ew = { root, day: t.dataset.day, id: e2 ? e2.id : '', key: tr2.dataset.key, fno: null };
+      ew.init = ewVals(e2); if (e2 && facNoOf(e2)) ew.fno = { no: facNoOf(e2), n: R.facNmTxt(e2) };
+      const d = $('#ewDlg'); $('#ewBody').innerHTML = ewHtml(); d.classList.toggle('phone', SHEET());
+      for (const [k, v] of Object.entries(ew.init)) { const el = ewF(k); if (el) el.value = v; }
+      ewHead(e2, tr2); $('#ewErr').textContent = ''; ewMenuClose();
+      if (!d.open) d.showModal(); d.querySelector('.ewbody').scrollTop = 0;
+      const first = ewF('name'); if (first && (FINE() || !COARSE())) { first.focus({ preventScroll: true }); first.select(); } else $('#ewT').setAttribute('tabindex', '-1'), $('#ewT').focus({ preventScroll: true });
+      if (!AHF) loadAhf().catch(() => {}); codesFor((S.settings.prov) || 'AB').catch(() => {}); loadIcd().catch(() => {});
+    };
+    gQ.then(go);
+  }
+  function ewHead(e, tr) {
+    const rows = ewRows(ew.root, ew.day), i = rows.indexOf(tr);
+    $('#ewT').textContent = e ? (displayWho(e) || 'Entry') : 'New entry';
+    $('#ewSub').textContent = [R.fmtDay(ew.day), tr ? 'Row ' + (tr.sectionRowIndex + 1) : '', i >= 0 ? `${i + 1} of ${rows.length}` : ''].filter(Boolean).join(' · ');
+    $('#ewPrev').disabled = i <= 0; $('#ewNext').disabled = i < 0 || i >= rows.length - 1 || (!e && i === rows.length - 1);
+    const mu = $('#ew_mu'); if (mu) { const m = e && e.segs.length ? Math.floor(R.msOf(e) / 60000) : null; mu.textContent = m == null ? '–' : `${m} min · ${R.units(m)} unit${R.units(m) === 1 ? '' : 's'}`; }
+  }
+  const ewRead = () => { const v = Object.assign({}, ew.init); for (const f of ewFields()) { const el = ewF(f.k); if (el) v[f.k] = el.value; } return v; };
+  const ewChanged = () => { if (!ew) return []; const v = ewRead(); return Object.keys(v).filter(k => String(v[k]).trim() !== String(ew.init[k]).trim()); };
+  // save; resolves true when saved (or nothing to save), false when a value needs fixing (the field gets focus)
+  function ewSave() {
+    if (!ew || !S) return Promise.resolve(false);
+    const ch = new Set(ewChanged()); if (!ch.size) return Promise.resolve(true);
+    const v = ewRead(), o = ew; $('#ewErr').textContent = '';
+    return new Promise(res => gEnq(async () => {
+      const day = o.day, isNew = !o.id; let e;
+      if (isNew) { const sh = activeShift(); e = { id: uid(), kind: 'enc', name: '', mrn: '', chart: '', label: '', initials: '', billingNote: '', setting: v.hc === 'C' ? 'C' : 'H', facility: (sh ? sh.facility : S.settings.curFac) || null, type: '', codes: [], notes: [], segs: [], status: 'new', photos: [], links: [], created: Date.now(), updated: Date.now() }; if (day !== today()) { e.at = edmAt(day, 12, 0); e.late = true; } }
+      else { const e0 = S.encs.find(x => x.id === o.id); if (!e0) { res(false); return; } e = clone(e0); }
+      const notes = []; let bad = null;
+      for (const k of EW_SAVE) {
+        if (k === 'ref' ? !(ch.has('refNm') || ch.has('refId')) : !ch.has(k)) continue;
+        if (isNew && k === 'hc') continue;
+        const raw = k === 'ref' ? { n: v.refNm, id: v.refId } : k === 'fno' ? (o.fno && o.fno.no === v.fno.trim() ? o.fno : v.fno) : v[k];
+        try { const n = await applyCell(e, k === 'ref' ? 'refObj' : k, raw, isNew ? day : R.encDay(e)); if (n) notes.push(n.replace(/ in spreadsheet/, '')); }
+        catch (er) { if (!er.user) throw er; bad = { k: k === 'ref' ? 'refId' : k, m: er.message }; break; }
+      }
+      if (bad) { $('#ewErr').textContent = bad.m; const el = ewF(bad.k); if (el) el.focus(); res(false); return; }
+      if (!notes.length) { res(true); return; }
+      if (isNew) { const n = S.encs.filter(x => R.encDay(x) === day && kindOf(x) === 'enc').length + 1; if (!ptName(e) && !ptMrn(e)) e.label = `Encounter ${n}`; const cn = carryFac(e, day); await saveEnc(e, 'create', ['Created in the entry window'].concat(notes, cn ? [cn] : []).join('. ')); o.id = e.id; o.key = e.id; }
+      else await saveEnc(e, notes.some(n => /^Started/.test(n)) ? 'start' : notes.some(n => /^Stopped/.test(n)) ? 'stop' : 'edit', 'Entry window: ' + notes.join('; '));
+      for (const k of ['fno', 'fcen']) if (ch.has(k)) fcRemember(day, k, k === 'fno' ? (facNoOf(e) ? { no: facNoOf(e), n: R.facNmTxt(e) } : null) : fcenOf(e) || null);
+      o.init = ewVals(e); res(true);
+    }));
+  }
+  function ewClose() { ewMenuClose(); const d = $('#ewDlg'); if (d.open) d.close(); const o = ew; ew = null; if (o) { const t = o.root.querySelector(`table.grid[data-day="${CSS.escape(o.day)}"]`), tr = t && (o.id ? t.querySelector(`tr[data-id="${CSS.escape(o.id)}"]`) : null), c = tr && tr.querySelector('.gc[data-c="name"]'); if (c && FINE()) setTimeout(() => focusCell(c), 0); } }
+  async function ewStep(dir) {
+    if (!ew) return; if (!(await ewSave())) return;
+    await gQ; await new Promise(r => requestAnimationFrame(r));
+    const rows = ewRows(ew.root, ew.day), cur = ewTr(), i = rows.indexOf(cur), nx = rows[i + dir];
+    if (nx) ewOpen(nx); else toast(dir > 0 ? 'That was the last row' : 'That was the first row');
+  }
+  $('#ewForm').addEventListener('submit', async ev => { ev.preventDefault(); if (await ewSave()) { toast('Saved'); ewClose(); } });
+  $('#ewCancel').addEventListener('click', () => { const n = ewChanged().length; ewClose(); if (n) toast('Changes not saved'); });
+  $('#ewPrev').addEventListener('click', () => ewStep(-1));
+  $('#ewNext').addEventListener('click', () => ewStep(1));
+  $('#ewDlg').addEventListener('cancel', ev => { ev.preventDefault(); if (!$('#ewMenu').hidden) return ewMenuClose(); $('#ewCancel').click(); });
+  $('#ewDlg').addEventListener('click', ev => { if (ev.target === $('#ewDlg') && !ewChanged().length) ewClose(); if (!ev.target.closest('.ewmenu, .ewdd, .ewi')) ewMenuClose(); });
+  window.addEventListener('resize', () => { if (ew) { $('#ewDlg').classList.toggle('phone', SHEET()); ewMenuPlace(); } });
+
+  // ---- choices (▾): favourites, recent values, code searches; typing filters them
+  const ewTok = (k, v) => { if (!EW_MULTI[k]) return String(v || '').trim(); const m = /([^,;\s]*)$/.exec(String(v || '')); return m ? m[1] : ''; };
+  const EW_MULTI = { fee: 1, mod1: 1, mod2: 1, dx: 1 };
+  function ewRecent(get, n, days) {
+    const since = Date.now() - (days || 60) * 86400000, cnt = new Map();
+    for (const e of S.encs) { if (kindOf(e) === 'shift' || (e.updated || e.created || 0) < since) continue; for (const x of [].concat(get(e) || [])) { if (!x) continue; const key = typeof x === 'string' ? x : x.key; const c = cnt.get(key) || { n: 0, x, t: 0 }; c.n++; c.t = Math.max(c.t, e.updated || e.created || 0); cnt.set(key, c); } }
+    return [...cnt.values()].sort((a, b) => b.n - a.n || b.t - a.t).slice(0, n || 10).map(c => c.x);
+  }
+  const fz = s => MBSearch.fold(String(s || ''));
+  async function ewChoices(k, val) {
+    const q = ewTok(k, val), fq = fz(q), m = s => !fq || fz(s).includes(fq), st = S.settings, out = [];
+    const add = (sec, v, code, d, x) => { if (out.some(o => o.sec === sec && o.v === v)) return; out.push(Object.assign({ sec, v, code, d: d || '' }, x || {})); };
+    if (k === 'name' || k === 'mrn') {
+      const l = ewRecent(e => (ptName(e) || ptMrn(e)) ? { key: (ptName(e) || '') + '\u0001' + (ptMrn(e) || ''), n: ptName(e) || '', m: ptMrn(e) || '' } : null, 40, 14);
+      l.filter(x => m(x.n + ' ' + x.m)).slice(0, 12).forEach(x => add('Recent patients (last 14 days)', k === 'name' ? x.n : x.m, k === 'name' ? x.n : x.m, k === 'name' ? x.m : x.n, { pt: x }));
+      if (!out.length) out.push({ note: 'No recent patient matches. Keep typing to enter a new one.' });
+    } else if (k === 'tin' || k === 'tout') {
+      const now = R.edm(Date.now()); add('Quick', 'now', 'now', 'the time now (' + R.pad(now.h) + ':' + R.pad(now.mi) + ')');
+      const rows = dayList(ew.day, false).filter(e => kindOf(e) !== 'shift' && e.id !== ew.id && R.endOf(e) != null);
+      if (k === 'tin' && rows.length) { const last = rows[rows.length - 1]; add('Quick', R.hm(R.endOf(last)), R.hm(R.endOf(last)), 'Out of the row before (' + (displayWho(last) || '') + ')'); }
+      if (k === 'tout') { const p = parseHm(ewF('tin').value); if (p && p !== 'now') for (const mm of [15, 23, 30, 45, 60, 90]) { const t = p[0] * 60 + p[1] + mm; if (t < 1440) add('After In', R.pad(Math.floor(t / 60)) + ':' + R.pad(t % 60), R.pad(Math.floor(t / 60)) + ':' + R.pad(t % 60), `In + ${mm} min (${R.units(mm)} unit${R.units(mm) === 1 ? '' : 's'})`); } }
+    } else if (k === 'fno') {
+      const fav = st.favFno || [], rec = (st.recFno || []).filter(n => !fav.includes(n)), nm = n => (AHF_BY.get(n) || [])[1] || customNm(n);
+      fav.filter(n => m(n + ' ' + nm(n))).forEach(n => add('Favourites', n, n, nm(n)));
+      rec.filter(n => m(n + ' ' + nm(n))).forEach(n => add('Recent', n, n, nm(n)));
+      if (q && AHF) { let c = 0; for (const f of AHF.f) { if (c >= 12) break; if (f[0].startsWith(q) || fz(f[1] + ' ' + f[2]).includes(fq)) { add('Alberta Health listing', f[0], f[0], f[1] + (f[2] ? ' · ' + f[2] : '')); c++; } } }
+      out.push({ act: 'pk', pk: 'fno', label: 'Full facility list…' });
+    } else if (k === 'fcen') {
+      const fav = new Set(st.favFcen || []); R.FCEN_ALL.filter(f => fav.has(f[0]) && m(f[0] + ' ' + f[1])).forEach(f => add('Favourites', f[0], f[0], f[1]));
+      R.FCEN.filter(f => m(f[0] + ' ' + f[1])).forEach(f => add('Common', f[0], f[0], f[1]));
+      if (fq) R.FCEN_ALL.filter(f => m(f[0] + ' ' + f[1])).slice(0, 12).forEach(f => add('All codes', f[0], f[0], f[1]));
+      out.push({ act: 'pk', pk: 'fcen', label: 'Full functional centre list…' });
+    } else if (k === 'fee') {
+      if (!q) (st.favSets || []).slice(0, 8).forEach(f => { const v = (f.codes || []).map(c => c.c).join(', '); if (v) add('Saved code sets (replaces the codes)', v, v, (f.codes || []).map(c => c.dx ? c.c + ' → ' + c.dx : '').filter(Boolean).join(', '), { whole: 1 }); });
+      ewRecent(e => (e.codes || []).map(c => ({ key: c.c, c: c.c, d: c.d || '' })), 30).filter(c => m(c.c + ' ' + c.d)).slice(0, 10).forEach(c => add('Recent', c.c, c.c, c.d));
+      if (q) (await searchCodes(q, st.prov || 'AB').catch(() => [])).forEach(c => add('Fee schedule search', c.c, c.c, c.d));
+      out.push({ act: 'fd', fd: 'fee', label: 'Search in Fee Desk ↗' });
+    } else if (k === 'mod1' || k === 'mod2') {
+      ewRecent(e => [1, 2].flatMap(n => String(modOf(e, n) || '').split(/[,\s]+/)).filter(Boolean), 20).filter(c => m(c)).forEach(c => add('Recent', c, c, R.isMu(c) ? 'time units' : ''));
+      COMMON_MODS.filter(c => m(c)).forEach(c => add('Common modifiers', c, c, R.isMu(c) ? 'time units (15 min each)' : ''));
+      if (q && /^[A-Za-z]+\d*$/.test(q) && !out.some(o => o.v === q.toUpperCase())) add('Typed', q.toUpperCase(), q.toUpperCase(), 'use as typed');
+      out.push({ act: 'fd', fd: k, label: 'Pick in Fee Desk ↗' });
+    } else if (k === 'dx') {
+      ewRecent(e => R.dxList(e), 30).filter(c => m(c + ' ' + dxDesc(c))).slice(0, 10).forEach(c => add('Recent', c, c, dxDesc(c)));
+      if (q) (await searchDx(q).catch(() => [])).forEach(c => add('ICD-9 search', c.c, c.c, c.d));
+      out.push({ act: 'fd', fd: 'dx', label: 'Search in Fee Desk ↗' });
+    } else if (k === 'refNm' || k === 'refId') {
+      const l = (st.recRef || []).concat(ewRecent(e => e.refNm || e.refId ? { key: (e.refNm || '') + '\u0001' + (e.refId || ''), n: e.refNm || '', id: e.refId || '' } : null, 20, 365));
+      l.filter(x => m(x.n + ' ' + x.id)).forEach(x => add('Recent referring providers', k === 'refNm' ? x.n : x.id, k === 'refNm' ? x.n || '(no name)' : x.id || '(no ID)', k === 'refNm' ? x.id : x.n, { ref: x }));
+      if (!out.length) out.push({ note: 'No referring providers yet. Type the name and practitioner ID; they are remembered for next time.' });
+    } else if (k === 'note') {
+      ewRecent(e => billingNoteOf(e) ? billingNoteOf(e).slice(0, 200) : null, 12, 90).filter(m).forEach(n => add('Recent billing notes', n, n.length > 60 ? n.slice(0, 60) + '…' : n, ''));
+      if (!out.length) out.push({ note: 'No recent billing notes.' });
+    }
+    if (!out.some(o => !o.act && !o.note) && !out.some(o => o.note)) out.unshift({ note: q ? 'No match. What you typed is kept.' : 'Nothing saved yet. Type a value.' });
+    return out;
+  }
+  let ewM = null;   // { k, items, hi }
+  function ewMenuClose() { const mn = $('#ewMenu'); if (mn) { mn.hidden = true; mn.innerHTML = ''; } ewM = null; $$('#ewBody .ewi[aria-expanded]').forEach(x => x.removeAttribute('aria-expanded')); }
+  function ewMenuPlace() {
+    if (!ewM) return; const mn = $('#ewMenu'), el = ewF(ewM.k), d = $('#ewDlg'); if (!el) return;
+    const wrap = el.closest('.ewin'), a = wrap.getBoundingClientRect(), dr = d.getBoundingClientRect();
+    const below = dr.bottom - a.bottom - 8, above = a.top - dr.top - 8, h = Math.min(320, Math.max(below, above));
+    mn.style.left = Math.round(a.left - dr.left) + 'px'; mn.style.width = Math.round(Math.max(a.width, Math.min(360, dr.width - 16))) + 'px'; mn.style.maxHeight = Math.round(Math.max(140, h)) + 'px';
+    if (a.left - dr.left + mn.offsetWidth > dr.width - 8) mn.style.left = Math.max(8, Math.round(dr.width - 8 - mn.offsetWidth)) + 'px';
+    if (below >= Math.min(220, mn.scrollHeight) || below >= above) { mn.style.top = Math.round(a.bottom - dr.top + 2) + 'px'; mn.style.bottom = ''; }
+    else { mn.style.top = ''; mn.style.bottom = Math.round(dr.bottom - a.top + 2) + 'px'; }
+  }
+  async function ewMenuOpen(k, keepHi, all) {   // all: the ▾ button / Alt+↓ (every choice, not filtered by what is in the field)
+    const el = ewF(k); if (!ew || !el) return; const seq = (ewMenuOpen.seq = (ewMenuOpen.seq || 0) + 1);
+    const items = await ewChoices(k, all && !EW_MULTI[k] ? '' : el.value); if (seq !== ewMenuOpen.seq || !ew) return;
+    const hiOld = ewM && ewM.k === k && keepHi ? ewM.hi : -1; ewM = { k, items, hi: hiOld };
+    const pick = items.map((x, i) => x.note ? -1 : i).filter(i => i >= 0); if (!pick.includes(ewM.hi)) ewM.hi = -1;
+    let h = '', sec = null;
+    items.forEach((x, i) => {
+      if (x.note) { h += `<p class="ewnote">${esc(x.note)}</p>`; return; }
+      if (x.act) { h += `<button type="button" class="ewo act${i === ewM.hi ? ' hi' : ''}" role="option" data-i="${i}" tabindex="-1">${esc(x.label)}</button>`; return; }
+      if (x.sec !== sec) { sec = x.sec; h += `<div class="ewsec" role="presentation">${esc(sec)}</div>`; }
+      h += `<button type="button" class="ewo${i === ewM.hi ? ' hi' : ''}" role="option" data-i="${i}" tabindex="-1"><span class="ewc mono">${esc(x.code)}</span>${x.d ? `<span class="ewd">${esc(x.d)}</span>` : ''}</button>`;
+    });
+    const mn = $('#ewMenu'); mn.innerHTML = h; mn.hidden = false; el.setAttribute('aria-expanded', 'true'); ewMenuPlace();
+    const hi = mn.querySelector('.ewo.hi'); if (hi) hi.scrollIntoView({ block: 'nearest' });
+  }
+  function ewSet(k, v) { const el = ewF(k); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
+  async function ewChoose(i) {
+    if (!ewM) return; const x = ewM.items[i], k = ewM.k, el = ewF(k); if (!x || x.note || !el) return;
+    if (x.act === 'pk') { ewMenuClose(); return ewPk(x.pk); }
+    if (x.act === 'fd') { ewMenuClose(); return ewFd(x.fd); }
+    if (x.pt) { if (k === 'name') { el.value = x.pt.n; if (!ewF('mrn').value.trim()) ewF('mrn').value = x.pt.m; } else { el.value = x.pt.m; if (!ewF('name').value.trim()) ewF('name').value = x.pt.n; } }
+    else if (x.ref) { if (ewF('refNm')) ewF('refNm').value = x.ref.n; if (ewF('refId')) ewF('refId').value = x.ref.id; }
+    else if (EW_MULTI[k] && !x.whole) {
+      const cur = el.value, tok = ewTok(k, cur), base = cur.slice(0, cur.length - tok.length).replace(/[,;\s]+$/, ''), have = base.split(/[,;\s]+/).filter(Boolean).map(s => s.toUpperCase());
+      el.value = have.includes(String(x.v).toUpperCase()) ? (base ? base + ', ' : '') : (base ? base + ', ' : '') + x.v + ', ';
+    } else { el.value = x.v; if (k === 'fno') ew.fno = { no: x.v, n: (AHF_BY.get(x.v) || [])[1] || customNm(x.v) }; }
+    ewMenuClose(); el.focus({ preventScroll: true }); const n = el.value.length; if (el.setSelectionRange) el.setSelectionRange(n, n);
+  }
+  function ewPk(kind) {   // the v9o Facility # / Functional centre list, on top of the window
+    const el = ewF(kind); if (!el || !ew) return; const cur = el.value.trim();
+    const open = () => fpkOpen({ kind, cur, sub: $('#ewT').textContent, anchor: el.closest('.ewin'), rowFac: ewF('fno').value.trim(),
+      onPick: v => { if (!ew) return; if (kind === 'fno') { ew.fno = v ? { no: v.no, n: AHF_BY.has(v.no) ? AHF_BY.get(v.no)[1] : v.n || '', mine: v.mine } : null; el.value = v ? v.no : ''; } else el.value = v || ''; },
+      onDone: () => setTimeout(() => { if (ew && el.isConnected) el.focus({ preventScroll: true }); }, 30) });
+    if (kind === 'fno' && !AHF) loadAhf().then(open); else open();
+  }
+  async function ewFd(kind) {   // Fee Desk pick: save the window first, the pick then lands in that row (same as the cell ↗)
+    if (!(await ewSave())) return; await gQ; const id = ew && ew.id; ewClose();
+    const e = id && S.encs.find(x => x.id === id); if (e) pickInFeeDesk(e, kind); else toast('Type something in the row first (a name, MRN / PHN or a time), then pick in Fee Desk');
+  }
+  $('#ewBody').addEventListener('click', ev => {
+    const dd = ev.target.closest('[data-dd]'); if (dd) { if (ewM && ewM.k === dd.dataset.dd) return ewMenuClose(); ewF(dd.dataset.dd).focus({ preventScroll: true }); return ewMenuOpen(dd.dataset.dd, false, true); }
+    const pk = ev.target.closest('[data-pk]'); if (pk) return ewPk(pk.dataset.pk);
+    const fd = ev.target.closest('[data-fd]'); if (fd) return ewFd(fd.dataset.fd);
+  });
+  $('#ewMenu').addEventListener('mousedown', ev => ev.preventDefault());   // a mouse click keeps the focus in the field (touch: the pick puts it back)
+  $('#ewMenu').addEventListener('click', ev => { const b = ev.target.closest('.ewo'); if (b) ewChoose(+b.dataset.i); });
+  const EW_LIVE = { fee: 1, dx: 1, mod1: 1, mod2: 1, fno: 1, fcen: 1, name: 1, refNm: 1, refId: 1 };
+  $('#ewBody').addEventListener('input', ev => { const el = ev.target.closest('.ewi'); if (!el) return; const k = el.dataset.k; if (k === 'fno' && ew) ew.fno = null; $('#ewErr').textContent = '';
+    if ((ewM && ewM.k === k) || (EW_LIVE[k] && ewTok(k, el.value).length >= (k === 'name' ? 2 : 1))) ewMenuOpen(k); else if (ewM && ewM.k === k) ewMenuClose(); });
+  $('#ewBody').addEventListener('focusin', ev => { const el = ev.target.closest('.ewi'); if (el && ewM && ewM.k !== el.dataset.k) ewMenuClose(); });
+  $('#ewDlg').addEventListener('keydown', ev => {
+    if (!ew || ev.isComposing) return; const k = ev.key, el = ev.target.closest && ev.target.closest('.ewi');
+    if (k === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); return $('#ewForm').requestSubmit(); }
+    if (ev.altKey && (k === 'ArrowUp' || k === 'ArrowDown') && !(el && k === 'ArrowDown' && el.tagName !== 'SELECT')) { ev.preventDefault(); return ewStep(k === 'ArrowUp' ? -1 : 1); }
+    if (!el || el.tagName === 'SELECT') return;
+    if ((k === 'ArrowDown' && ev.altKey) || k === 'F4') { ev.preventDefault(); return ewM && ewM.k === el.dataset.k ? ewMenuClose() : ewMenuOpen(el.dataset.k, false, true); }
+    if (!ewM || ewM.k !== el.dataset.k) { if (k === 'Enter' && el.tagName === 'INPUT') { ev.preventDefault(); ewNextField(el, ev.shiftKey ? -1 : 1); } return; }
+    const it = ewM.items, step = d => { let i = ewM.hi; for (let n = 0; n < it.length; n++) { i = (i + d + it.length) % it.length; if (!it[i].note) break; } ewM.hi = i; $$('#ewMenu .ewo').forEach(b => b.classList.toggle('hi', +b.dataset.i === i)); const b = $(`#ewMenu .ewo[data-i="${i}"]`); if (b) b.scrollIntoView({ block: 'nearest' }); };
+    if (k === 'ArrowDown') { ev.preventDefault(); return step(1); }
+    if (k === 'ArrowUp') { ev.preventDefault(); return step(-1); }
+    if (k === 'Enter' && ewM.hi >= 0) { ev.preventDefault(); return ewChoose(ewM.hi); }
+    if (k === 'Enter' && el.tagName === 'INPUT') { ev.preventDefault(); ewMenuClose(); return ewNextField(el, 1); }
+    if (k === 'Escape') { ev.preventDefault(); ev.stopPropagation(); return ewMenuClose(); }
+    if (k === 'Tab') ewMenuClose();
+  });
+  function ewNextField(el, d) { const l = $$('#ewBody .ewi'), i = l.indexOf(el), n = l[i + d]; if (n) { n.focus(); if (n.select) n.select(); } else $('#ewSave').focus(); }
 
   // ---- v9i notes editor: a bottom sheet on phones, a popover beside the cell on a computer. Multi-line, grows with the
   // text, 16 px+ (no iPhone zoom). Done / Ctrl+Enter / Tab save like any cell (encrypted entry, audit-logged); Cancel / Esc
@@ -1342,7 +1625,7 @@
   $('#eFcen').addEventListener('click', () => eFpOpen('fcen'));
   function fpSetUi() {
     if (!S || !$('#fpCard')) return; const st = S.settings;
-    $('#fcCarry').checked = st.fcCarry !== false;
+    $('#fcCarry').checked = st.fcCarry !== false; $('#refCol').checked = !!st.refCol;
     const fRow = (no, sec) => { const x = facInfo(no), nm = x ? x.n : customNm(no); return `<div class="fpsrow"><span><b>${esc(no)}</b> ${esc(nm || '')}${x ? ` <small class="muted">${esc(x.city)}</small>` : ' <small class="muted">not in listing</small>'}</span><button type="button" class="linkbtn sm" data-${sec}="${esc(no)}">${sec === 'unfav' ? 'Remove' : '☆ Favourite'}</button></div>`; };
     const fav = st.favFno || [], rec = (st.recFno || []).filter(n => !fav.includes(n));
     $('#fnoFavList').innerHTML = fav.length ? fav.map(n => fRow(n, 'unfav')).join('') : '<p class="small muted">None yet. Tap ☆ beside a facility in the Facility # list, or Add….</p>';
@@ -1352,6 +1635,7 @@
     $('#fpSrc').textContent = AHF ? ahfSrc() : 'Facility numbers and names: Alberta Health facility listing (loads when first used).';
   }
   $('#fcCarry').addEventListener('change', async () => { S.settings.fcCarry = $('#fcCarry').checked; await saveSettings(); });
+  $('#refCol').addEventListener('change', async () => { S.settings.refCol = $('#refCol').checked; await saveSettings(); colsSync(); $('#todayList').innerHTML = ''; histStale = true; render(); toast(S.settings.refCol ? 'Referring provider column on' : 'Referring provider column off (saved names stay with each entry)'); });
   $('#fpCard').addEventListener('click', async ev => {
     const t = ev.target, st = S && S.settings; if (!st) return;
     if (t.dataset.unfav) { st.favFno = (st.favFno || []).filter(n => n !== t.dataset.unfav); await saveSettings(); return fpSetUi(); }
@@ -1475,12 +1759,12 @@
   // characters next to their ↗ ⓘ buttons, the two Modifier columns ~15 characters, before anything wraps; the cell being
   // edited is at least two lines tall (CSS) and every code cell wraps and grows the row instead of clipping.
   const CODEC = { fee: 1, mod1: 1, mod2: 1, dx: 1 };
-  const FIT = { name: [22, 13, 34], mrn: [12.5, 12.5, 26], fno: [10, 10, 30], fcen: [8.5, 8.5, 22], fee: [24.5, 25.5, 46], mod1: [23.5, 24.5, 42], mod2: [23.5, 24.5, 42], dx: [24.5, 25.5, 46], note: [30, 28, 44] };
+  const FIT = { name: [22, 13, 34], mrn: [12.5, 12.5, 26], fno: [10, 10, 30], fcen: [8.5, 8.5, 22], fee: [24.5, 25.5, 46], mod1: [23.5, 24.5, 42], mod2: [23.5, 24.5, 42], dx: [24.5, 25.5, 46], ref: [20, 16, 34], note: [30, 28, 44] };
   // v9q wide screens (mouse, grid ≥ 900 px): every column on screen. Extra width goes to the text-heavy columns in these
   // proportions (MRN and the time / number columns stay compact); when the window is too narrow for the fitted widths, the
   // text columns give back width down to these minimums (ch) and their text wraps instead (no sideways scrolling at 1280+).
-  const GROW = { name: 1.2, mrn: 0, fno: 0.8, fcen: 0.5, fee: 1, mod1: 0.7, mod2: 0.7, dx: 1, note: 1.5 };
-  const CMIN = { name: 11, mrn: 11, fno: 7, fcen: 6.5, fee: 11, mod1: 9, mod2: 9, dx: 10, note: 9 };
+  const GROW = { ref: 0.8, name: 1.2, mrn: 0, fno: 0.8, fcen: 0.5, fee: 1, mod1: 0.7, mod2: 0.7, dx: 1, note: 1.5 };
+  const CMIN = { ref: 7, name: 11, mrn: 11, fno: 7, fcen: 6.5, fee: 11, mod1: 9, mod2: 9, dx: 10, note: 9 };
   const WIDEFIT = (ww, touch) => !touch && ww >= 900;
   function fitPx(key, need, ch, ww, touch) {
     const cfg = FIT[key], mn = cfg[touch ? 1 : 0] * ch; let max = cfg[2] * ch;
@@ -1529,7 +1813,7 @@
     // fast path while typing: re-measure only the edited column; if its width stays the same, nothing else can change
     const st = t._fit, okey = only && only.dataset && only.dataset.c;
     if (only && st && st.ww === ww && st.touch === touch && FIT[okey] && st.px[okey] != null && (!st.np || st.np[okey] != null)) {
-      const f = okey !== 'name' && okey !== 'note' ? st.fM : st.fS;
+      const f = okey !== 'name' && okey !== 'note' && okey !== 'ref' ? st.fM : st.fS;
       let need = st.head[okey] || 0;
       for (const el of t.querySelectorAll(`tbody .gc[data-c="${okey}"]`)) { const txt = txtOf(el); if (txt) need = Math.max(need, fitRec(el, f, txt).tw); }
       const px = fitPx(okey, need, st.ch[okey], ww, touch), fin = st.px[okey];   // v9q: wide screens compare the fitted width before sharing out
@@ -1549,7 +1833,7 @@
     cols.forEach((col, i) => {
       const key = keys[i], cfg = FIT[key];
       if (!cfg) { sum += fixed[i]; return; }
-      const h = t.querySelector(`thead [data-h="${key}"]`), isM = key !== 'name' && key !== 'note', f = isM ? fM : fS, ch = fitMw('0', f);
+      const h = t.querySelector(`thead [data-h="${key}"]`), isM = key !== 'name' && key !== 'note' && key !== 'ref', f = isM ? fM : fS, ch = fitMw('0', f);
       let need = h ? fitMw(h.textContent, fH) + 18 : 0, tmin = 0; memo.head[key] = need; memo.ch[key] = ch;
       for (const el of t.querySelectorAll(`tbody .gc[data-c="${key}"]`)) {
         const txt = txtOf(el); if (!txt) continue;
@@ -2266,6 +2550,7 @@
     if (k !== 'shift') {
       const cs = e.codes || [];
       rows.push(['Codes', cs.length ? cs.map(c => `<span class="sc"><b>${esc(c.c)}</b>${c.dx ? ` <span class="dxc">Dx ${esc(c.dx)}</span>` : ''}${c.d ? ` <span class="muted">${esc(c.d.length > 60 ? c.d.slice(0, 60) + '…' : c.d)}</span>` : ''}</span>`).join('') + (e.dx ? `<span class="sc"><span class="dxc">Dx ${esc(e.dx)}</span></span>` : '') + dxxHtml(e) : (e.dx || R.dxExtra(e).length ? (e.dx ? `<span class="dxc">Dx ${esc(e.dx)}</span>` : '') + dxxHtml(e) : '<span class="muted">None yet. Tap Edit to add fee and diagnostic codes.</span>')]);
+      if (e.refNm || e.refId) rows.push(['Referring provider', esc(refTxt(e))]);   // v9r
       if (facNoOf(e) || fcenOf(e)) rows.push(['Facility # · Functional centre', [facNoOf(e) && `<span class="sc"><b>${esc(facNoOf(e))}</b>${R.facNmTxt(e) ? ` <span class="muted">${esc(R.facNmTxt(e))}</span>` : ''}</span>`, fcenOf(e) && `<span class="sc"><b>${esc(fcenOf(e))}</b>${R.fcenName(fcenOf(e)) ? ` <span class="muted">${esc(R.fcenName(fcenOf(e)))}</span>` : ''}</span>`].filter(Boolean).join('')]);   // v9o
       if (modOf(e, 1) || modOf(e, 2)) rows.push(['Modifiers', [1, 2].filter(n => modOf(e, n)).map(n => `<span class="sc"><span class="muted">${n}:</span> <b>${esc(modOf(e, n))}</b></span>`).join('')]);
       if (k === 'cb' && (e.links || []).length) rows.push(['Linked', (e.links || []).map(id => S.encs.find(x => x.id === id)).filter(Boolean).map(x => `<button type="button" class="linkbtn sm" data-open="${esc(x.id)}">${esc(x.label || 'Encounter')} ${R.hm(R.startOf(x))}</button>`).join(' ')]);
@@ -2420,6 +2705,7 @@
     if (a === 'mod') return pickInFeeDesk(e, 'mod1');
     if (a === 'full') return openProc(e);
     if (a === 'del') return delEntry(e);
+    if (a === 'ew') { const tr = $$('#todayList tr[data-id], #histList tr[data-id]').find(x => x.dataset.id === e.id && x.offsetParent); if (tr) return ewOpen(tr); return openEdit(e); }
     openEdit(e, false, a === 'segs' ? { edit: true } : a === 'time' ? { panel: 'time' } : a === 'note' ? { panel: 'note' } : {});
   });
   async function delEntry(e) {
