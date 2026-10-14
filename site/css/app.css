@@ -896,3 +896,59 @@ table.grid tfoot tr.gts>td{overflow:visible}
 table.grid.fitw thead th{white-space:normal;line-height:1.15;overflow-wrap:normal;word-break:normal;padding-top:2px;padding-bottom:2px}
 /* v9q: squeezed Facility # / Functional centre → code only (full name in the tooltip and the list) */
 table.grid.nar-fno td.c-fno .gc.fpv .fpn,table.grid.nar-fcen td.c-fcen .gc.fpv .fpn{display:none}
+/* v9r entry window: every field of one row. Groups/fields come from EW_LAYOUT in app.js (reorder there). */
+dialog.ewdlg{width:min(1040px,calc(100vw - 24px));max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow:visible;background:var(--bg)}
+.ewbox{display:flex;flex-direction:column;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);margin:0}
+.ewhd{display:flex;align-items:center;gap:8px;padding:10px 14px 6px;border-bottom:1px solid var(--line);background:var(--card);border-radius:12px 12px 0 0}
+.ewtt{flex:1 1 auto;min-width:0}.ewtt h3{margin:0;font-size:1.05rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ewtt p{margin:1px 0 0}
+.ewnav{display:flex;gap:6px;flex:0 0 auto}.ewnav button{min-height:36px;padding:4px 12px}
+.ewbody{flex:1 1 auto;overflow:auto;padding:6px 12px 8px;overscroll-behavior:contain}
+.ewg{border:1px solid var(--line);border-radius:10px;background:var(--card);margin:6px 0;padding:4px 10px 10px;min-width:0}
+.ewg legend{font-size:.78rem;font-weight:700;color:var(--muted);padding:0 4px;text-transform:uppercase;letter-spacing:.03em}
+.ewgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px 10px}
+.ewf{display:flex;flex-direction:column;gap:2px;min-width:0}.ewf.sp2{grid-column:span 2}.ewf.sp3{grid-column:span 3}.ewf.sp4{grid-column:1 / -1}
+.ewl{font-size:.8rem;color:var(--muted);font-weight:600}
+.ewin{display:flex;align-items:stretch;min-width:0;border:1px solid #c9d2db;border-radius:8px;background:#fff}
+.ewin:focus-within{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal-l)}
+.ewin .ewi{flex:1 1 auto;min-width:0;border:0;outline:0;background:transparent;padding:7px 8px;font-size:15px;min-height:36px;box-sizing:border-box;border-radius:8px;color:var(--ink);font-family:inherit}
+.ewin .ewi.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.ewin textarea.ewi{resize:vertical;min-height:64px;line-height:1.35}
+.ewin select.ewi{appearance:auto}
+.ewdd,.ewx{flex:0 0 auto;border:0;border-left:1px solid var(--line);background:transparent;color:var(--teal-d);font-size:.95rem;padding:0 10px;min-width:34px;cursor:pointer;border-radius:0}
+.ewx{font-size:.78rem;font-weight:600;white-space:nowrap}.ewin>:last-child.ewdd,.ewin>:last-child.ewx{border-radius:0 8px 8px 0}
+.ewdd:hover,.ewx:hover{background:var(--teal-l)}
+.ewf.ro .ewro{display:block;padding:8px 2px;font-size:15px;color:var(--ink)}
+.ewerr{color:#b42318;margin:0;padding:0 14px;font-size:.88rem;min-height:0}.ewerr:empty{display:none}
+.ewft{display:flex;align-items:center;gap:8px;padding:8px 14px 10px;border-top:1px solid var(--line);background:var(--card);border-radius:0 0 12px 12px}
+.ewft .ewkeys{flex:1 1 auto;min-width:0}.ewft button{min-height:38px;padding:6px 18px}
+.ewmenu{position:absolute;z-index:5;background:#fff;border:1px solid #c9d2db;border-radius:8px;box-shadow:0 8px 24px rgba(15,23,42,.18);overflow:auto;padding:4px 0}
+.ewsec{font-size:.72rem;font-weight:700;color:var(--muted);padding:6px 10px 2px;text-transform:uppercase;letter-spacing:.03em}
+.ewo{display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;border:0;background:transparent;padding:7px 10px;font-size:.92rem;cursor:pointer;color:var(--ink);border-radius:0;min-height:34px}
+.ewo:hover,.ewo.hi{background:var(--teal-l)}.ewo.act{color:var(--teal-d);font-weight:600;border-top:1px solid var(--line)}
+.ewc{font-weight:700;flex:0 0 auto;white-space:nowrap}.ewd{color:var(--muted);font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.ewnote{margin:0;padding:8px 10px;color:var(--muted);font-size:.85rem}
+table.grid tbody th.rn{cursor:pointer}
+table.grid col.c-ref{width:160px}
+table.grid td.c-ref{white-space:normal}
+table.grid thead th.h-ref{text-align:left;padding-left:8px}
+@media (max-width:900px){.ewgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.ewf.sp3,.ewf.sp4{grid-column:1 / -1}}
+/* phone: a full-screen sheet */
+@media (max-width:767px){
+  dialog.ewdlg{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;margin:0;border-radius:0}
+  .ewbox{height:100%;max-height:none}
+  .ewhd{border-radius:0;padding:calc(8px + env(safe-area-inset-top)) 10px 6px;flex-wrap:wrap}
+  .ewnav{width:100%;justify-content:space-between}.ewnav button{flex:1 1 0;min-height:42px}
+  .ewbody{padding:4px 8px 8px}
+  .ewgrid{grid-template-columns:minmax(0,1fr);gap:8px}.ewf.sp2,.ewf.sp3,.ewf.sp4{grid-column:auto}
+  .ewin .ewi{font-size:16px;min-height:44px}.ewdd,.ewx{min-width:44px}
+  .ewft{border-radius:0;padding:8px 10px calc(10px + env(safe-area-inset-bottom))}.ewft .ewkeys{display:none}.ewft button{flex:1 1 0;min-height:46px}
+  .ewo{min-height:44px;font-size:1rem}
+}
+.ewtt h3:focus{outline:none}
+table.grid td.c-ref textarea.gc{overflow-wrap:break-word;word-break:normal}
+table.grid td.c-name .cw{position:relative}
+table.grid .rew{display:none;position:absolute;right:1px;top:50%;transform:translateY(-50%);z-index:2;width:26px;height:24px;border:1px solid #c5cdd6;border-radius:5px;background:#fff;color:var(--teal-d);font-size:14px;line-height:1;cursor:pointer;padding:0;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+table.grid .rew:hover{background:var(--teal-l)}
+table.grid tbody tr.act>td.c-name .rew{display:block}
+@media (hover:hover) and (pointer:fine){table.grid tbody tr.gr:hover>td.c-name .rew{display:block}}
+@media (pointer:coarse){table.grid .rew{width:36px;height:32px}}
