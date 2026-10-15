@@ -952,3 +952,23 @@ table.grid .rew:hover{background:var(--teal-l)}
 table.grid tbody tr.act>td.c-name .rew{display:block}
 @media (hover:hover) and (pointer:fine){table.grid tbody tr.gr:hover>td.c-name .rew{display:block}}
 @media (pointer:coarse){table.grid .rew{width:36px;height:32px}}
+/* v9t billing lines, modifiers with units, checks, expected total */
+.ewlines{display:flex;flex-direction:column;gap:8px;margin:8px 0 4px}
+.ewline{border:1px solid var(--line);border-left:4px solid var(--teal);border-radius:10px;background:var(--card);padding:6px 10px 8px}
+.ewlh{display:flex;align-items:center;gap:10px;margin:0 0 6px}.ewlh b{font-size:.92rem;flex:1 1 auto}
+.ewpay{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700;color:var(--teal-d);background:var(--teal-l);border-radius:999px;padding:2px 10px;font-size:.9rem}
+.ewdel{border:0;background:transparent;color:#b42318;font-size:1rem;min-width:32px;min-height:32px;cursor:pointer;border-radius:6px}.ewdel:hover{background:#fdecea}
+.ewh{color:var(--muted);font-size:.78rem;min-height:1em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ewmods{display:flex;flex-wrap:wrap;gap:6px 10px}
+.ewmod{display:flex;gap:4px;align-items:stretch}.ewmod .ewin{width:9.5em}
+.ewi.ewu{width:4.2em;border:1px solid #c9d2db;border-radius:8px;padding:6px;font-size:15px;text-align:center;background:#fff;min-height:36px;box-sizing:border-box}
+.ewi.ewu:focus{outline:0;border-color:var(--teal);box-shadow:0 0 0 2px var(--teal-l)}
+.ewl .ewx{border:1px solid var(--line);border-radius:6px;margin-left:6px;padding:1px 8px;min-height:24px}
+.ewbrk{margin:0;font-size:.78rem}.ewbrk:empty{display:none}
+.ewaddl{display:block;width:100%;border:1px dashed var(--teal);background:transparent;color:var(--teal-d);font-weight:600;border-radius:10px;min-height:40px;margin:2px 0 6px;cursor:pointer}.ewaddl:hover{background:var(--teal-l)}
+.ewchks{display:flex;flex-wrap:wrap;gap:4px 14px;padding:6px 0}.ewchk{display:flex;align-items:center;gap:4px;font-size:.9rem}
+.ewchecks{border:1px solid #cfe3d6;background:#f3faf5;border-radius:10px;padding:6px 12px;margin:6px 0}.ewchecks.has{border-color:#f0c36d;background:#fff8e6}
+.ewchecks b{font-size:.82rem}.ewchecks ul{margin:4px 0 2px;padding-left:18px;font-size:.86rem}.ewchecks li.ok{list-style:none;margin-left:-18px;color:#1e7a46}
+.ewtot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;border-top:1px solid var(--line);background:var(--teal-l);font-weight:600}
+.ewtot b{font-size:1.15rem;color:var(--teal-d)}
+@media (max-width:767px){.ewline .ewgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.ewline .ewf.sp4,.ewline .ewf:nth-child(1),.ewline .ewf:nth-child(2){grid-column:1 / -1}.ewft .ewkeys{display:none}}

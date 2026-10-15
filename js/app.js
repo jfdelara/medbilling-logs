@@ -1017,43 +1017,166 @@
   }
   bindGrid($('#todayList')); bindGrid($('#histList'));
 
-  // ============================================================ v9r entry window (one row, every field)
-  // Tap / click a row number (or ⋯ → Open entry window, or Ctrl+Enter in a cell) to see and edit every column of that
-  // encounter in one window: a centred window on a computer, a full-screen sheet on a phone. Save / Cancel / Previous / Next.
-  // Every field has a ▾ list of choices (favourites, recent values, the code searches and the Facility # / Functional centre
-  // lists) and still takes typing. Values go through the same applyCell() as the spreadsheet, so the rules, encryption,
-  // audit log and Undo are the same. The layout is the EW_LAYOUT list below: reorder / regroup it to match another EMR's screen.
-  const EW_LAYOUT = [
-    { g: 'Patient', f: [{ k: 'name', l: 'Patient name', span: 2 }, { k: 'mrn', l: 'ULI / PHN or MRN', mono: 1 }, { k: 'hc', l: 'Hospital / Clinic', sel: [['H', 'H · Hospital'], ['C', 'C · Clinic']] }] },
-    { g: 'Time', f: [{ k: 'tin', l: 'In (24 h)', mono: 1, im: 'numeric', ph: 'HH:MM' }, { k: 'tout', l: 'Out (24 h)', mono: 1, im: 'numeric', ph: 'HH:MM' }, { k: 'mu', l: 'Min · Units', ro: 1 }] },
-    { g: 'Facility', f: [{ k: 'fno', l: 'Facility #', mono: 1, im: 'numeric', pk: 'fno' }, { k: 'fcen', l: 'Functional centre', mono: 1, cap: 'characters', pk: 'fcen' }] },
-    { g: 'Billing', f: [{ k: 'fee', l: 'Fee code(s)', mono: 1, cap: 'characters', multi: 1, fd: 'fee', span: 2 }, { k: 'mod1', l: 'Modifier code 1', mono: 1, cap: 'characters', multi: 1, fd: 'mod1' }, { k: 'mod2', l: 'Modifier code 2', mono: 1, cap: 'characters', multi: 1, fd: 'mod2' }, { k: 'dx', l: 'Dx (ICD-9)', mono: 1, cap: 'characters', multi: 1, fd: 'dx', span: 2 }] },
-    { g: 'Referring provider', ref: 1, f: [{ k: 'refNm', l: 'Referring provider name' }, { k: 'refId', l: 'Practitioner ID', mono: 1, im: 'numeric' }] },
-    { g: 'Notes', f: [{ k: 'note', l: 'Billing notes', ta: 1, span: 4 }] }];
-  const EW_SAVE = ['name', 'mrn', 'hc', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'ref', 'note', 'tin', 'tout'];   // fee before Dx, In before Out
-  const COMMON_MODS = ['CMGP', 'BMI', 'BMIPRO', 'TEV', 'TNTP', 'TNTA', 'TWK', 'TST', 'TDES', 'CMXV15', 'CMXV20', 'CMXV30', 'CMXC30', 'SURT', 'ANE', 'ASST', 'LOCI', 'COMP'];
-  let ew = null;
-  const ewF = k => $('#ew_' + k);
-  const ewFields = () => EW_LAYOUT.filter(g => !g.ref || refOn()).flatMap(g => g.f).filter(f => !f.ro);
+  // ============================================================ v9t entry window (one encounter, every field)
+  // Opens from ⤢ in the Patient name cell, ⋯ → Open entry window, Ctrl+Enter in a cell, or a row number on a phone.
+  // Layout (v9t): claim details → billing lines (1, 2, 3 … + Add billing line, no limit), each with fee code, ICD-9,
+  // calls, modifiers with a units box each, and the expected payment → visit details, checks (live) and the expected total.
+  // Every text field has a ▾ list of choices and still takes typing. EW_HEAD / EW_LINE / EW_FOOT are plain lists:
+  // reorder them to change the layout. Expected payments are estimates from the bundled Alberta SOMB data (fees-AB.json).
+  const EW_HEAD = [{ k: 'name', l: 'Patient name', span: 2 }, { k: 'mrn', l: 'ULI / PHN or MRN', mono: 1 }, { k: 'sex', l: 'Sex', sel: [['', '–'], ['F', 'Female'], ['M', 'Male'], ['X', 'X / other']] },
+    { k: 'prov', l: 'Billing physician' }, { k: 'skill', l: 'Specialty (skill code)', mono: 1, cap: 'characters' }, { k: 'ba', l: 'BA number', mono: 1 }, { k: 'hc', l: 'Hospital / Clinic', sel: [['H', 'H · Hospital'], ['C', 'C · Clinic']] },
+    { k: 'refNm', l: 'Referring physician', ref: 1 }, { k: 'refId', l: 'Referring practitioner ID', mono: 1, im: 'numeric', ref: 1 }, { k: 'fno', l: 'Facility #', mono: 1, im: 'numeric', pk: 'fno' }, { k: 'fcen', l: 'Functional centre', mono: 1, cap: 'characters', pk: 'fcen' },
+    { k: 'loc', l: 'Site / location', span: 2 }];
+  const EW_FOOT = [{ k: 'admit', l: 'Admitted on', date: 1 }, { k: 'encNo', l: 'Visit # that day', sel: [['', '–']].concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => [String(n), String(n)])) }, { k: 'tin', l: 'In (24 h)', mono: 1, im: 'numeric', ph: 'HH:MM' }, { k: 'tout', l: 'Out (24 h)', mono: 1, im: 'numeric', ph: 'HH:MM' },
+    { k: 'origFac', l: 'Original facility' }, { k: 'origLoc', l: 'Original location' }, { k: 'newborn', l: 'Newborn' }, { k: 'mu', l: 'Minutes · units', ro: 1 },
+    { k: 'intercept', l: 'Hold reason' }, { k: 'flags', l: 'Claim flags', chk: [['general', 'General'], ['emsaf', 'EMSAF'], ['goodFaith', 'Good-faith claim'], ['conf', 'Confidential'], ['limitAmt', 'Limit amount'], ['sendConf', 'Send confidential']], span: 3 },
+    { k: 'note', l: 'Internal note (billing notes)', ta: 1, span: 4 }];
+  const EW_MA = ['sex', 'prov', 'skill', 'ba', 'loc', 'admit', 'encNo', 'origFac', 'origLoc', 'newborn', 'intercept'], EW_CHK = ['general', 'emsaf', 'goodFaith', 'conf', 'limitAmt', 'sendConf'];
+  const EW_SAVE = ['name', 'mrn', 'hc', 'fno', 'fcen', 'ref', 'note', 'tin', 'tout'];
+  const SKILLS = { OBGY: 'Obstetrics & Gynaecology', GP: 'General practice', FTER: 'Family medicine', ANES: 'Anaesthesia', PED: 'Paediatrics', INMD: 'Internal medicine', GNSG: 'General surgery', EMSP: 'Emergency medicine', UROL: 'Urology', CARD: 'Cardiology', PSYC: 'Psychiatry', DERM: 'Dermatology', ORTH: 'Orthopaedics', OPHT: 'Ophthalmology', OTOL: 'Otolaryngology', NEUR: 'Neurology', RHEU: 'Rheumatology', PLAS: 'Plastic surgery', GAST: 'Gastroenterology', NEPH: 'Nephrology' };
+  const COMMON_MODS = ['CMGP', 'BMI', 'BMIPRO', 'TEV', 'TNTP', 'TNTA', 'TWK', 'TST', 'TDES', 'CMXV15', 'CMXV20', 'CMXV35', 'CMXC30', 'SURT', 'TELES', 'ANE', 'ASST', 'LOCI', 'COMP'];
+  const SURT = ['TDES', 'TEV', 'TNTA', 'TNTP', 'TST', 'TWK'];
+  let ew = null, FEES = null;
+  const loadFees = () => FEES ? Promise.resolve(FEES) : fetch('data/fees-AB.json').then(r => r.json()).then(d => (FEES = d.c)).catch(() => (FEES = {}));
+  const ewF = k => $('#ew_' + CSS.escape(k));
+  const money = n => '$' + (Math.round(n * 100) / 100).toFixed(2);
+  // ---- a billing line's values (from an entry); mods: [{c, u}]
+  function ewLines(e) {
+    const cs = (e && e.codes) || [], m1 = normModsL(e && modOf(e, 1)), m2 = normModsL(e && modOf(e, 2));
+    const rest = cs.slice(1).flatMap(c => normModsL(c.mods)), ok = cs.length > 1 && rest.join(',') === normModsL(m2.join(',')).join(',');   // per-line modifiers still match Modifier code 2
+    const L = cs.map((c, i) => ({ code: c.c || '', dx: c.dx || '', q: String(c.q || 1), mods: (i === 0 ? m1 : ok ? normModsL(c.mods) : i === 1 ? m2 : []).map(x => ({ c: x, u: ((c.mu || {})[x] != null ? c.mu[x] : (e.modU || {})[x]) || '' })) }));
+    if (!L.length) L.push({ code: '', dx: (e && (e.dx || R.dxList(e)[0])) || '', q: '1', mods: m1.map(x => ({ c: x, u: (e && (e.modU || {})[x]) || '' })) });
+    return L;
+  }
+  const normModsL = v => String(v || '').split(/[,;\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
   function ewVals(e) {
-    if (!e) return { name: '', mrn: '', hc: quickSet || 'H', tin: '', tout: '', fno: '', fcen: '', fee: '', mod1: '', mod2: '', dx: '', refNm: '', refId: '', note: '' };
-    const st = e.segs.length > 0, en = R.endOf(e);
-    return { name: ptName(e) || '', mrn: ptMrn(e) || '', hc: e.setting === 'C' ? 'C' : 'H', tin: st ? R.hm(R.startOf(e)) : '', tout: st && en != null ? R.hm(en) : '', fno: facNoOf(e) || '', fcen: fcenOf(e) || '',
-      fee: (e.codes || []).map(c => c.c).join(', '), mod1: modOf(e, 1) || '', mod2: modOf(e, 2) || '', dx: R.dxList(e).join(', '), refNm: e.refNm || '', refId: e.refId || '', note: billingNoteOf(e) || '' };
+    const st = e && e.segs.length > 0, en = e && R.endOf(e), ma = (e && e.ma) || {}, d = S.settings.ewDef || {};
+    const v = { name: e ? ptName(e) || '' : '', mrn: e ? ptMrn(e) || '' : '', hc: e ? (e.setting === 'C' ? 'C' : 'H') : quickSet || 'H', tin: st ? R.hm(R.startOf(e)) : '', tout: st && en != null ? R.hm(en) : '',
+      fno: e ? facNoOf(e) || '' : '', fcen: e ? fcenOf(e) || '' : '', refNm: (e && e.refNm) || '', refId: (e && e.refId) || '', note: e ? billingNoteOf(e) || '' : '' };
+    for (const k of EW_MA) v[k] = ma[k] != null ? String(ma[k]) : (k === 'prov' || k === 'skill' || k === 'ba' ? d[k] || '' : '');
+    for (const k of EW_CHK) v[k] = (ma[k] != null ? ma[k] : k === 'general') ? 'on' : '';
+    ewLines(e).forEach((l, i) => { v[`s${i}_code`] = l.code; v[`s${i}_dx`] = l.dx; v[`s${i}_q`] = l.q; l.mods.concat([{ c: '', u: '' }]).forEach((m, j) => { v[`s${i}_m${j}`] = m.c; v[`s${i}_u${j}`] = m.u ? R.p2(+m.u) : ''; }); });
+    return v;
   }
-  function ewHtml() {
-    return EW_LAYOUT.filter(g => !g.ref || refOn()).map(g => `<fieldset class="ewg"><legend>${esc(g.g)}</legend><div class="ewgrid">` + g.f.map(f => {
-      if (f.ro) return `<div class="ewf ro${f.span ? ' sp' + f.span : ''}"><span class="ewl">${esc(f.l)}</span><output id="ew_${f.k}" class="ewro mono"></output></div>`;
-      const id = 'ew_' + f.k, a = `id="${id}" name="${f.k}" data-k="${f.k}" class="ewi${f.mono ? ' mono' : ''}" autocomplete="off" autocorrect="off" spellcheck="false" aria-autocomplete="list" aria-controls="ewMenu"${f.im ? ` inputmode="${f.im}"` : ''}${f.cap ? ` autocapitalize="${f.cap}"` : ''}${f.ph ? ` placeholder="${esc(f.ph)}"` : ''}`;
-      const inp = f.sel ? `<select id="${id}" name="${f.k}" data-k="${f.k}" class="ewi">${f.sel.map(o => `<option value="${o[0]}">${esc(o[1])}</option>`).join('')}</select>`
-        : f.ta ? `<textarea rows="3" maxlength="500" ${a}></textarea>` : `<input maxlength="${f.multi ? 200 : 120}" ${a}>`;
-      const dd = f.sel ? '' : `<button type="button" class="ewdd" data-dd="${f.k}" tabindex="-1" aria-label="Choices for ${esc(f.l)}" title="Choices (Alt+↓)">▾</button>`;
-      const ex = f.pk ? `<button type="button" class="ewx" data-pk="${f.pk}" tabindex="-1" title="Open the full ${esc(f.l)} list (favourites first)">List…</button>`
-        : f.fd ? `<button type="button" class="ewx" data-fd="${f.fd}" tabindex="-1" title="Save, then pick in Fee Desk (the pick comes back to this row)">Fee Desk ↗</button>` : '';
-      return `<div class="ewf${f.span ? ' sp' + f.span : ''}" data-f="${f.k}"><label class="ewl" for="${id}">${esc(f.l)}</label><div class="ewin">${inp}${dd}${ex}</div></div>`;
-    }).join('') + '</div></fieldset>').join('');
+  function ewFld(f, key) {
+    key = key || f.k; const id = 'ew_' + key, span = f.span ? ' sp' + f.span : '';
+    if (f.ro) return `<div class="ewf ro${span}" data-f="${key}"><span class="ewl">${esc(f.l)}</span><output id="${id}" class="ewro mono"></output></div>`;
+    if (f.chk) return `<div class="ewf${span}"><span class="ewl">${esc(f.l)}</span><div class="ewchks">${f.chk.map(c => `<label class="ewchk"><input type="checkbox" id="ew_${c[0]}" data-k="${c[0]}" class="ewc1"> ${esc(c[1])}</label>`).join('')}</div></div>`;
+    const a = `id="${id}" name="${key}" data-k="${key}" class="ewi${f.mono ? ' mono' : ''}" autocomplete="off" autocorrect="off" spellcheck="false" aria-autocomplete="list" aria-controls="ewMenu"${f.im ? ` inputmode="${f.im}"` : ''}${f.cap ? ` autocapitalize="${f.cap}"` : ''}${f.ph ? ` placeholder="${esc(f.ph)}"` : ''}`;
+    const inp = f.sel ? `<select id="${id}" name="${key}" data-k="${key}" class="ewi">${f.sel.map(o => `<option value="${o[0]}">${esc(o[1])}</option>`).join('')}</select>`
+      : f.ta ? `<textarea rows="3" maxlength="500" ${a}></textarea>` : f.date ? `<input type="date" ${a}>` : `<input maxlength="${f.max || 120}" ${a}>`;
+    const dd = f.sel || f.date ? '' : `<button type="button" class="ewdd" data-dd="${key}" tabindex="-1" aria-label="Choices for ${esc(f.l)}" title="Choices (Alt+↓)">▾</button>`;
+    const ex = f.pk ? `<button type="button" class="ewx" data-pk="${f.pk}" tabindex="-1" title="Open the full ${esc(f.l)} list (favourites first)">List…</button>`
+      : f.fd ? `<button type="button" class="ewx" data-fd="${f.fd}" tabindex="-1" title="Save, then pick in Fee Desk (the pick comes back to this row)">Fee Desk ↗</button>` : '';
+    return `<div class="ewf${span}" data-f="${key}"><label class="ewl" for="${id}">${esc(f.l)}</label><div class="ewin">${inp}${dd}${ex}</div>${f.hint ? `<small class="ewh" id="${id}_h"></small>` : ''}</div>`;
   }
-  // rows of the grid the window walks through (real encounters, then the first empty row = a new entry)
+  function ewModRow(i, j) {
+    return `<div class="ewmod" data-mi="${j}"><div class="ewin"><input id="ew_s${i}_m${j}" data-k="s${i}_m${j}" class="ewi mono" maxlength="12" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Billing line ${i + 1}, modifier ${j + 1}" aria-controls="ewMenu"><button type="button" class="ewdd" data-dd="s${i}_m${j}" tabindex="-1" aria-label="Modifier choices">▾</button></div>`
+      + `<input id="ew_s${i}_u${j}" data-k="s${i}_u${j}" class="ewi ewu mono" maxlength="2" inputmode="numeric" placeholder="units" aria-label="Units for modifier ${j + 1}" title="Units (01–99): time units for TEV, TNTP… or calls for CMGP"></div>`;
+  }
+  function ewLineHtml(i, nm) {
+    let mods = ''; for (let j = 0; j < nm; j++) mods += ewModRow(i, j);
+    return `<section class="ewline" data-line="${i}"><div class="ewlh"><b>Billing line ${i + 1}</b><span class="ewpay" id="ew_s${i}_pay" title="Expected payment for this line">–</span>${i ? `<button type="button" class="ewdel" data-dline="${i}" title="Remove this billing line" aria-label="Remove billing line ${i + 1}">✕</button>` : ''}</div><div class="ewgrid">`
+      + ewFld({ k: 'code', l: 'Fee code', mono: 1, cap: 'characters', fd: 'fee', hint: 1 }, `s${i}_code`) + ewFld({ k: 'dx', l: 'ICD-9 diagnosis', mono: 1, cap: 'characters', fd: 'dx', hint: 1 }, `s${i}_dx`)
+      + ewFld({ k: 'q', l: 'Calls', mono: 1, im: 'numeric', max: 3 }, `s${i}_q`) + `<div class="ewf ro"><span class="ewl">Service date</span><output class="ewro mono" data-sdate></output></div>`
+      + `<div class="ewf sp4"><span class="ewl">Modifiers and units <button type="button" class="ewx ewaddm" data-addm="${i}" tabindex="-1">＋ Modifier</button><button type="button" class="ewx" data-fd="mod${i ? 2 : 1}" tabindex="-1" title="Save, then pick a modifier in Fee Desk">Fee Desk ↗</button></span><div class="ewmods" id="ew_s${i}_mods">${mods}</div></div>`
+      + `<p class="ewbrk small muted sp4" id="ew_s${i}_brk"></p></div></section>`;
+  }
+  function ewHtml(v) {
+    const n = ewLineCount(v), head = EW_HEAD.filter(f => !f.ref || refOn());
+    let lines = ''; for (let i = 0; i < n; i++) lines += ewLineHtml(i, ewModCount(v, i));
+    return `<fieldset class="ewg"><legend>Claim details</legend><div class="ewgrid">${head.map(f => ewFld(f)).join('')}</div></fieldset>`
+      + `<div class="ewlines" id="ewLines">${lines}</div><button type="button" class="ewaddl" id="ewAddLine">＋ Add billing line</button>`
+      + `<fieldset class="ewg"><legend>Visit details</legend><div class="ewgrid">${EW_FOOT.map(f => ewFld(f)).join('')}</div></fieldset>`
+      + `<section class="ewchecks" aria-live="polite"><b>Checks</b><ul id="ewChecks"></ul></section>`;
+  }
+  const ewLineCount = v => { let n = 0; while (`s${n}_code` in v) n++; return Math.max(1, n); };
+  const ewModCount = (v, i) => { let n = 0; while (`s${i}_m${n}` in v) n++; return Math.max(1, n); };
+  const ewKind = k => { const m = /^s\d+_(code|dx|q|m\d+|u\d+)$/.exec(k); if (!m) return k; return m[1] === 'code' ? 'fee' : m[1] === 'dx' ? 'dx' : m[1] === 'q' ? 'q' : m[1][0] === 'm' ? 'mod' : 'u'; };
+  function ewFill(v) {
+    for (const [k, x] of Object.entries(v)) { const el = ewF(k); if (!el) continue; if (el.type === 'checkbox') el.checked = x === 'on'; else el.value = x; }
+  }
+  function ewRead() {
+    const v = Object.assign({}, ew.init);
+    for (const k of Object.keys(v)) if (/^s\d+_/.test(k)) delete v[k];   // billing lines come from the form only
+    $$('#ewBody [data-k]').forEach(el => { v[el.dataset.k] = el.type === 'checkbox' ? (el.checked ? 'on' : '') : el.value; });
+    return v;
+  }
+  function ewChanged() {
+    if (!ew) return []; const v = ewRead(), i = ew.init, ks = new Set(Object.keys(v).concat(Object.keys(i)));
+    return [...ks].filter(k => String(v[k] == null ? '' : v[k]).trim() !== String(i[k] == null ? '' : i[k]).trim());
+  }
+  // read the billing lines from the form: [{ code, dx, q, mods: [{ c, u }] }]
+  function ewLinesRead(v) {
+    const out = [];
+    for (let i = 0; i < ewLineCount(v); i++) {
+      const mods = []; for (let j = 0; j < ewModCount(v, i); j++) { const c = String(v[`s${i}_m${j}`] || '').trim().toUpperCase(); if (c) mods.push({ c, u: String(v[`s${i}_u${j}`] || '').trim(), j }); }
+      out.push({ i, code: String(v[`s${i}_code`] || '').trim().toUpperCase(), dx: String(v[`s${i}_dx`] || '').trim().toUpperCase(), q: String(v[`s${i}_q`] || '').trim(), mods });
+    }
+    return out;
+  }
+  // ---- expected payment of one billing line (estimate: SOMB base or the skill's fee, the listed modifier actions, calls)
+  function ewFee(code, mods, q, skill) {
+    const F = FEES && FEES[code]; if (!F) return null;
+    const num = s => parseFloat(String(s).replace(/[%$,\s]/g, '')) || 0, pct = s => /%\s*$/.test(String(s));
+    let base = F[0]; const how = [];
+    if (skill && F[1] && F[1][skill] != null) { base = +F[1][skill]; how.push(`${skill} rate ${money(base)}`); } else if (base != null) how.push(`base ${money(base)}`);
+    const noBase = base == null; if (noBase) base = 0;
+    let add = 0; const unknown = [], needU = [];
+    for (const m of mods) {
+      const r = F[2].find(x => x[0] === m.c); if (!r) { unknown.push(m.c); continue; }
+      const v = r[2];
+      if (r[3]) { const n = parseInt(m.u, 10) || 0; if (!n) { needU.push(m.c); continue; } let a = 0; for (const t of r[3]) { const [lo, hi] = String(t[0]).split('-').map(Number), cnt = Math.max(0, Math.min(n, hi || lo) - lo + 1); if (/Increase By/.test(t[1])) a += cnt * num(t[2]); } add += a; how.push(`${m.c} ×${R.p2(n)} +${money(a)}`); continue; }
+      if (/^Increase Base By$/.test(r[1])) { const d = pct(v) ? base * num(v) / 100 : num(v); base += d; how.push(`${m.c} +${money(d)}`); }
+      else if (/Replace Base|^Replace$/.test(r[1])) { base = num(v); how.push(`${m.c} → ${money(base)}`); }
+      else if (/Increase Base To|Reduce Base To/.test(r[1])) { base = base * num(v) / 100; how.push(`${m.c} ${v}`); }
+      else if (/^Increase By$/.test(r[1])) { const d = pct(v) ? base * num(v) / 100 : num(v); add += d; how.push(`${m.c} +${money(d)}`); }
+      else how.push(`${m.c} (not priced here)`);
+    }
+    const calls = Math.max(1, parseInt(q, 10) || 1), ct = F[2].find(r => !r[4] && r[3] && r[3].some(t => /Pay Base At/.test(t[1])));
+    let tot = 0;
+    if (ct) for (let c = 1; c <= calls; c++) { const t = ct[3].find(t => { const [lo, hi] = String(t[0]).split('-').map(Number); return c >= lo && c <= (hi || lo); }); tot += t ? base * (/Pay Base At/.test(t[1]) ? num(t[2]) / 100 : 1) : 0; }
+    else tot = base * calls;
+    if (calls > 1) how.push(`× ${calls} calls`);
+    return { tot: tot + add, how, unknown, needU, noBase, F };
+  }
+  // live: descriptions, expected payment per line, checks, total
+  function ewCalc() {
+    if (!ew) return; const v = ewRead(), lines = ewLinesRead(v), prov = S.settings.prov || 'AB', o = codeCache[prov], skill = String(v.skill || '').trim().toUpperCase(), sex = v.sex, chk = [];
+    let total = 0, priced = 0;
+    for (const l of lines) {
+      const n = l.i + 1, hit = l.code && o && o.byNorm.get(norm(l.code)), h1 = ewF(`s${l.i}_code_h`), h2 = ewF(`s${l.i}_dx_h`);
+      if (h1) h1.textContent = l.code ? (hit ? hit.d : (o ? 'Not in the bundled Alberta schedule' : '')) : '';
+      if (h2) h2.textContent = l.dx ? (dxDesc(dxCode(l.dx)) || (ICD ? 'Not in the bundled ICD-9 list' : '')) : '';
+      const pay = ewF(`s${l.i}_pay`), brk = ewF(`s${l.i}_brk`);
+      if (!l.code) { if (pay) pay.textContent = '–'; if (brk) brk.textContent = ''; if (l.dx || l.mods.length) chk.push(`Billing line ${n}: no fee code yet`); continue; }
+      if (o && !hit) chk.push(`Billing line ${n}: ${l.code} is not in the bundled Alberta schedule (check the code)`);
+      if (l.q && !/^\d{1,3}$/.test(l.q)) chk.push(`Billing line ${n}: calls must be a number`);
+      if (!l.dx) chk.push(`Billing line ${n}: add an ICD-9 diagnosis for ${l.code}`);
+      for (const m of l.mods) if (m.u && !/^\d{1,2}$/.test(m.u)) chk.push(`Billing line ${n}: units for ${m.c} must be 1–99`);
+      const f = FEES ? ewFee(l.code, l.mods, l.q, skill) : null;
+      if (f) {
+        total += f.tot; priced++;
+        if (pay) pay.textContent = money(f.tot); if (brk) brk.textContent = 'Expected payment: ' + (f.how.join(' · ') || '—') + (f.noBase && !l.mods.length ? ' (no fixed fee; depends on modifiers)' : '');
+        const fl = f.F[3] || '';
+        if (fl.includes('f') && sex !== 'F') chk.push(`${l.code} is normally for a female patient${sex ? '' : ' (set Sex)'}`);
+        if (fl.includes('m') && sex !== 'M') chk.push(`${l.code} is normally for a male patient${sex ? '' : ' (set Sex)'}`);
+        if (fl.includes('r') && !String(v.refId || '').trim()) chk.push(`${l.code} usually needs a referring physician with a practitioner ID`);
+        if (fl.includes('t') && !l.mods.some(m => SURT.includes(m.c))) chk.push(`${l.code} needs a time modifier (${SURT.join(', ')}) with units`);
+        if (f.unknown.length) chk.push(`${f.unknown.join(', ')} ${f.unknown.length > 1 ? 'are' : 'is'} not listed as a modifier for ${l.code}`);
+        if (f.needU.length) chk.push(`${f.needU.join(', ')} on ${l.code}: enter the units`);
+        if (f.F[1] && !skill) chk.push(`${l.code} pays by specialty: set the skill code to see the right rate`);
+      } else { if (pay) pay.textContent = FEES ? 'n/a' : '…'; if (brk) brk.textContent = FEES ? 'No fee data for this code' : ''; }
+      for (const m of l.mods) if (R.isMu(m.c) && m.u && +m.u > 20) chk.push(`${m.c}: time units go up to 20`);
+    }
+    if (!lines.some(l => l.code)) chk.push('No fee code yet');
+    if (String(v.refNm || '').trim() && !String(v.refId || '').trim()) chk.push('Referring physician: add the practitioner ID');
+    if (!String(v.mrn || '').trim()) chk.push('No ULI / PHN');
+    if (!String(v.tin || '').trim()) chk.push('No In time');
+    const ul = $('#ewChecks'); if (ul) { ul.innerHTML = chk.length ? chk.map(x => `<li>${esc(x)}</li>`).join('') : '<li class="ok">No problems found</li>'; ul.parentNode.classList.toggle('has', chk.length > 0); }
+    const tt = $('#ewTotal'); if (tt) tt.textContent = priced ? money(total) : '–';
+    $$('#ewBody [data-sdate]').forEach(x => { x.textContent = R.fmtDay(ew.day); });
+  }
   function ewRows(root, day) {
     const t = root && root.querySelector(`table.grid[data-day="${CSS.escape(day)}"]`); if (!t) return [];
     const out = []; let blank = null;
@@ -1071,12 +1194,12 @@
       const tr2 = e ? root.querySelector(`tr[data-id="${CSS.escape(e.id)}"]`) || tr : tr, e2 = e && S.encs.find(x => x.id === e.id);
       ew = { root, day: t.dataset.day, id: e2 ? e2.id : '', key: tr2.dataset.key, fno: null };
       ew.init = ewVals(e2); if (e2 && facNoOf(e2)) ew.fno = { no: facNoOf(e2), n: R.facNmTxt(e2) };
-      const d = $('#ewDlg'); $('#ewBody').innerHTML = ewHtml(); d.classList.toggle('phone', SHEET());
-      for (const [k, v] of Object.entries(ew.init)) { const el = ewF(k); if (el) el.value = v; }
+      const d = $('#ewDlg'); $('#ewBody').innerHTML = ewHtml(ew.init); d.classList.toggle('phone', SHEET());
+      ewFill(ew.init);
       ewHead(e2, tr2); $('#ewErr').textContent = ''; ewMenuClose();
       if (!d.open) d.showModal(); d.querySelector('.ewbody').scrollTop = 0;
       const first = ewF('name'); if (first && (FINE() || !COARSE())) { first.focus({ preventScroll: true }); first.select(); } else $('#ewT').setAttribute('tabindex', '-1'), $('#ewT').focus({ preventScroll: true });
-      if (!AHF) loadAhf().catch(() => {}); codesFor((S.settings.prov) || 'AB').catch(() => {}); loadIcd().catch(() => {});
+      if (!AHF) loadAhf().catch(() => {}); ewCalc(); Promise.all([loadFees(), codesFor((S.settings.prov) || 'AB').catch(() => {}), loadIcd().catch(() => {})]).then(() => ewCalc());
     };
     gQ.then(go);
   }
@@ -1087,13 +1210,17 @@
     $('#ewPrev').disabled = i <= 0; $('#ewNext').disabled = i < 0 || i >= rows.length - 1 || (!e && i === rows.length - 1);
     const mu = $('#ew_mu'); if (mu) { const m = e && e.segs.length ? Math.floor(R.msOf(e) / 60000) : null; mu.textContent = m == null ? '–' : `${m} min · ${R.units(m)} unit${R.units(m) === 1 ? '' : 's'}`; }
   }
-  const ewRead = () => { const v = Object.assign({}, ew.init); for (const f of ewFields()) { const el = ewF(f.k); if (el) v[f.k] = el.value; } return v; };
-  const ewChanged = () => { if (!ew) return []; const v = ewRead(); return Object.keys(v).filter(k => String(v[k]).trim() !== String(ew.init[k]).trim()); };
   // save; resolves true when saved (or nothing to save), false when a value needs fixing (the field gets focus)
   function ewSave() {
     if (!ew || !S) return Promise.resolve(false);
     const ch = new Set(ewChanged()); if (!ch.size) return Promise.resolve(true);
     const v = ewRead(), o = ew; $('#ewErr').textContent = '';
+    const lines = ewLinesRead(v), linesCh = [...ch].some(k => /^s\d+_/.test(k)), maCh = EW_MA.concat(EW_CHK).some(k => ch.has(k));
+    const fail = (k, m) => { $('#ewErr').textContent = m; const el = ewF(k); if (el) el.focus(); return Promise.resolve(false); };
+    if (linesCh) for (const l of lines) {
+      if (l.q && !/^\d{1,3}$/.test(l.q) || +l.q === 0 && l.q) return fail(`s${l.i}_q`, `Billing line ${l.i + 1}: calls must be a number from 1`);
+      for (const m of l.mods) { if (m.u && !/^\d{1,2}$/.test(m.u) || m.u && +m.u < 1) return fail(`s${l.i}_u${m.j}`, `Billing line ${l.i + 1}: units for ${m.c} must be 1–99`); if (m.u && R.isMu(m.c) && +m.u > 20) return fail(`s${l.i}_u${m.j}`, `${m.c}: time units go from 01 to 20`); if (!/^[A-Z][A-Z0-9]{0,11}$/.test(m.c)) return fail(`s${l.i}_m${m.j}`, `Billing line ${l.i + 1}: "${m.c}" is not a modifier code`); }
+    }
     return new Promise(res => gEnq(async () => {
       const day = o.day, isNew = !o.id; let e;
       if (isNew) { const sh = activeShift(); e = { id: uid(), kind: 'enc', name: '', mrn: '', chart: '', label: '', initials: '', billingNote: '', setting: v.hc === 'C' ? 'C' : 'H', facility: (sh ? sh.facility : S.settings.curFac) || null, type: '', codes: [], notes: [], segs: [], status: 'new', photos: [], links: [], created: Date.now(), updated: Date.now() }; if (day !== today()) { e.at = edmAt(day, 12, 0); e.late = true; } }
@@ -1107,6 +1234,33 @@
         catch (er) { if (!er.user) throw er; bad = { k: k === 'ref' ? 'refId' : k, m: er.message }; break; }
       }
       if (bad) { $('#ewErr').textContent = bad.m; const el = ewF(bad.k); if (el) el.focus(); res(false); return; }
+      if (maCh) {   // v9t claim / visit details (kept in e.ma; older versions ignore it)
+        const ma = Object.assign({}, e.ma || {});
+        for (const k of EW_MA) { const x = String(v[k] || '').trim(); if (x) ma[k] = k === 'skill' ? x.toUpperCase() : x; else delete ma[k]; }
+        for (const k of EW_CHK) ma[k] = v[k] === 'on';
+        e.ma = ma; notes.push('Claim / visit details updated');
+        const d = Object.assign({}, S.settings.ewDef || {}); let dch = false; for (const k of ['prov', 'skill', 'ba']) { const x = ma[k] || ''; if (x && d[k] !== x) { d[k] = x; dch = true; } }
+        if (dch) { S.settings.ewDef = d; saveSettings().catch(() => {}); }
+      }
+      if (linesCh) {
+        const prov = S.settings.prov || 'AB'; await codesFor(prov).catch(() => null); const oc = codeCache[prov], old = e.codes || [], used = new Set();
+        const ls = lines.filter(l => l.code), codes = ls.map((l, idx) => {
+          let wi = old.findIndex((c, i) => !used.has(i) && norm(c.c) === norm(l.code)); if (wi < 0 && old[idx] && !used.has(idx) && !ls.some(x => norm(x.code) === norm(old[idx].c))) wi = idx; if (wi >= 0) used.add(wi);
+          const was = wi >= 0 ? old[wi] : {}, hit = oc && oc.byNorm.get(norm(l.code));
+          const x = Object.assign({}, was, norm(was.c) === norm(l.code) ? {} : hit ? { c: hit.c, k: hit.k || hit.c, d: hit.d || '', j: prov, f: hit.f || '' } : { c: l.code, k: l.code, d: '', j: prov, f: '' });
+          if (l.dx) { x.dx = dxCode(l.dx) || l.dx; x.dxd = dxDesc(x.dx) || ''; } else { delete x.dx; delete x.dxd; }
+          const q = parseInt(l.q, 10) || 1; if (q > 1) x.q = q; else delete x.q;
+          if (idx > 0 && l.mods.length) x.mods = l.mods.map(m => m.c).join(', '); else delete x.mods;
+          const mu = {}; for (const m of l.mods) if (m.u) mu[m.c] = +m.u; if (Object.keys(mu).length) x.mu = mu; else delete x.mu;
+          return x;
+        });
+        const m1 = (ls[0] || lines[0]).mods.map(m => m.c), m2 = normModsL(ls.slice(1).flatMap(l => l.mods.map(m => m.c)).join(','));
+        e.codes = codes; for (const [n, l] of [[1, m1], [2, m2]]) { const t = R.normMods(l.join(', ')).slice(0, MOD_MAX); if (t) e['mod' + n] = t; else delete e['mod' + n]; }
+        const mu = {}; for (const l of (ls.length ? ls : lines.slice(0, 1))) for (const m of l.mods) if (m.u && R.isMu(m.c)) mu[m.c] = +m.u;
+        e.modU = mu; pruneMu(e); if (!Object.keys(e.modU || {}).length) delete e.modU;
+        if (!codes.length && lines[0].dx) e.dx = dxCode(lines[0].dx) || lines[0].dx; else if (codes.length) delete e.dx;
+        notes.push(`Billing lines: ${codes.map(c => c.c + (c.q > 1 ? ' ×' + c.q : '')).join(', ') || 'none'}`);
+      }
       if (!notes.length) { res(true); return; }
       if (isNew) { const n = S.encs.filter(x => R.encDay(x) === day && kindOf(x) === 'enc').length + 1; if (!ptName(e) && !ptMrn(e)) e.label = `Encounter ${n}`; const cn = carryFac(e, day); await saveEnc(e, 'create', ['Created in the entry window'].concat(notes, cn ? [cn] : []).join('. ')); o.id = e.id; o.key = e.id; }
       else await saveEnc(e, notes.some(n => /^Started/.test(n)) ? 'start' : notes.some(n => /^Stopped/.test(n)) ? 'stop' : 'edit', 'Entry window: ' + notes.join('; '));
@@ -1131,15 +1285,15 @@
 
   // ---- choices (▾): favourites, recent values, code searches; typing filters them
   const ewTok = (k, v) => { if (!EW_MULTI[k]) return String(v || '').trim(); const m = /([^,;\s]*)$/.exec(String(v || '')); return m ? m[1] : ''; };
-  const EW_MULTI = { fee: 1, mod1: 1, mod2: 1, dx: 1 };
+  const EW_MULTI = {};   // v9t: one code per field (each billing line has its own fields)
   function ewRecent(get, n, days) {
     const since = Date.now() - (days || 60) * 86400000, cnt = new Map();
     for (const e of S.encs) { if (kindOf(e) === 'shift' || (e.updated || e.created || 0) < since) continue; for (const x of [].concat(get(e) || [])) { if (!x) continue; const key = typeof x === 'string' ? x : x.key; const c = cnt.get(key) || { n: 0, x, t: 0 }; c.n++; c.t = Math.max(c.t, e.updated || e.created || 0); cnt.set(key, c); } }
     return [...cnt.values()].sort((a, b) => b.n - a.n || b.t - a.t).slice(0, n || 10).map(c => c.x);
   }
   const fz = s => MBSearch.fold(String(s || ''));
-  async function ewChoices(k, val) {
-    const q = ewTok(k, val), fq = fz(q), m = s => !fq || fz(s).includes(fq), st = S.settings, out = [];
+  async function ewChoices(k0, val) {
+    const k = ewKind(k0), q = ewTok(k0, val), fq = fz(q), m = s => !fq || fz(s).includes(fq), st = S.settings, out = [];
     const add = (sec, v, code, d, x) => { if (out.some(o => o.sec === sec && o.v === v)) return; out.push(Object.assign({ sec, v, code, d: d || '' }, x || {})); };
     if (k === 'name' || k === 'mrn') {
       const l = ewRecent(e => (ptName(e) || ptMrn(e)) ? { key: (ptName(e) || '') + '\u0001' + (ptMrn(e) || ''), n: ptName(e) || '', m: ptMrn(e) || '' } : null, 40, 14);
@@ -1162,15 +1316,15 @@
       if (fq) R.FCEN_ALL.filter(f => m(f[0] + ' ' + f[1])).slice(0, 12).forEach(f => add('All codes', f[0], f[0], f[1]));
       out.push({ act: 'pk', pk: 'fcen', label: 'Full functional centre list…' });
     } else if (k === 'fee') {
-      if (!q) (st.favSets || []).slice(0, 8).forEach(f => { const v = (f.codes || []).map(c => c.c).join(', '); if (v) add('Saved code sets (replaces the codes)', v, v, (f.codes || []).map(c => c.dx ? c.c + ' → ' + c.dx : '').filter(Boolean).join(', '), { whole: 1 }); });
-      ewRecent(e => (e.codes || []).map(c => ({ key: c.c, c: c.c, d: c.d || '' })), 30).filter(c => m(c.c + ' ' + c.d)).slice(0, 10).forEach(c => add('Recent', c.c, c.c, c.d));
+            ewRecent(e => (e.codes || []).map(c => ({ key: c.c, c: c.c, d: c.d || '' })), 30).filter(c => m(c.c + ' ' + c.d)).slice(0, 10).forEach(c => add('Recent', c.c, c.c, c.d));
       if (q) (await searchCodes(q, st.prov || 'AB').catch(() => [])).forEach(c => add('Fee schedule search', c.c, c.c, c.d));
       out.push({ act: 'fd', fd: 'fee', label: 'Search in Fee Desk ↗' });
-    } else if (k === 'mod1' || k === 'mod2') {
+    } else if (k === 'mod') {
       ewRecent(e => [1, 2].flatMap(n => String(modOf(e, n) || '').split(/[,\s]+/)).filter(Boolean), 20).filter(c => m(c)).forEach(c => add('Recent', c, c, R.isMu(c) ? 'time units' : ''));
+      { const l = ewLinesRead(ewRead()).find(x => x.i === +/^s(\d+)/.exec(k0)[1]), F = l && FEES && FEES[l.code]; if (F) F[2].filter(r => r[4] && m(r[0])).slice(0, 25).forEach(r => add('Listed for ' + l.code, r[0], r[0], (r[1] || '') + (r[2] ? ' ' + r[2] : '') + (r[3] ? ' (needs units)' : ''))); }
       COMMON_MODS.filter(c => m(c)).forEach(c => add('Common modifiers', c, c, R.isMu(c) ? 'time units (15 min each)' : ''));
       if (q && /^[A-Za-z]+\d*$/.test(q) && !out.some(o => o.v === q.toUpperCase())) add('Typed', q.toUpperCase(), q.toUpperCase(), 'use as typed');
-      out.push({ act: 'fd', fd: k, label: 'Pick in Fee Desk ↗' });
+      out.push({ act: 'fd', fd: /^s0_/.test(k0) ? 'mod1' : 'mod2', label: 'Pick in Fee Desk ↗' });
     } else if (k === 'dx') {
       ewRecent(e => R.dxList(e), 30).filter(c => m(c + ' ' + dxDesc(c))).slice(0, 10).forEach(c => add('Recent', c, c, dxDesc(c)));
       if (q) (await searchDx(q).catch(() => [])).forEach(c => add('ICD-9 search', c.c, c.c, c.d));
@@ -1179,6 +1333,17 @@
       const l = (st.recRef || []).concat(ewRecent(e => e.refNm || e.refId ? { key: (e.refNm || '') + '\u0001' + (e.refId || ''), n: e.refNm || '', id: e.refId || '' } : null, 20, 365));
       l.filter(x => m(x.n + ' ' + x.id)).forEach(x => add('Recent referring providers', k === 'refNm' ? x.n : x.id, k === 'refNm' ? x.n || '(no name)' : x.id || '(no ID)', k === 'refNm' ? x.id : x.n, { ref: x }));
       if (!out.length) out.push({ note: 'No referring providers yet. Type the name and practitioner ID; they are remembered for next time.' });
+    } else if (k === 'q') { ['1', '2', '3', '4', '5'].forEach(n => add('Calls', n, n, n === '1' ? 'one call (usual)' : n + ' calls'));
+    } else if (k === 'u') { for (let n = 1; n <= 20; n++) add('Units', R.p2(n), R.p2(n), R.muMin ? R.muMin(n) + ' min' : '');
+    } else if (k === 'skill') {
+      ewRecent(e => e.ma && e.ma.skill, 10, 365).filter(c => m(c + ' ' + (SKILLS[c] || ''))).forEach(c => add('Recent', c, c, SKILLS[c] || ''));
+      Object.entries(SKILLS).filter(([c, d]) => m(c + ' ' + d)).forEach(([c, d]) => add('Specialties', c, c, d));
+      if (q && FEES) { const seen = new Set(Object.keys(SKILLS)); for (const F of Object.values(FEES)) { if (seen.size > 200) break; if (F[1]) for (const c of Object.keys(F[1])) if (!seen.has(c)) { seen.add(c); if (m(c)) add('Skill codes in the fee schedule', c, c, ''); } } }
+    } else if (['prov', 'ba', 'loc', 'origFac', 'origLoc', 'newborn', 'intercept'].includes(k)) {
+      const d = (st.ewDef || {})[k]; if (d && m(d)) add('Default', d, d, 'last used');
+      ewRecent(e => e.ma && e.ma[k], 12, 365).filter(m).forEach(x => add('Recent', x, x, ''));
+      if (k === 'newborn') ['Single', 'Twin A', 'Twin B', 'Triplet A', 'Triplet B', 'Triplet C'].filter(m).forEach(x => add('Common', x, x, ''));
+      if (k === 'intercept') ['Waiting for referral', 'Check code', 'Missing ULI / PHN', 'Out-of-province patient'].filter(m).forEach(x => add('Common', x, x, ''));
     } else if (k === 'note') {
       ewRecent(e => billingNoteOf(e) ? billingNoteOf(e).slice(0, 200) : null, 12, 90).filter(m).forEach(n => add('Recent billing notes', n, n.length > 60 ? n.slice(0, 60) + '…' : n, ''));
       if (!out.length) out.push({ note: 'No recent billing notes.' });
@@ -1223,7 +1388,7 @@
       const cur = el.value, tok = ewTok(k, cur), base = cur.slice(0, cur.length - tok.length).replace(/[,;\s]+$/, ''), have = base.split(/[,;\s]+/).filter(Boolean).map(s => s.toUpperCase());
       el.value = have.includes(String(x.v).toUpperCase()) ? (base ? base + ', ' : '') : (base ? base + ', ' : '') + x.v + ', ';
     } else { el.value = x.v; if (k === 'fno') ew.fno = { no: x.v, n: (AHF_BY.get(x.v) || [])[1] || customNm(x.v) }; }
-    ewMenuClose(); el.focus({ preventScroll: true }); const n = el.value.length; if (el.setSelectionRange) el.setSelectionRange(n, n);
+    ewMenuClose(); ewCalc(); el.focus({ preventScroll: true }); const n = el.value.length; if (el.setSelectionRange) el.setSelectionRange(n, n);
   }
   function ewPk(kind) {   // the v9o Facility # / Functional centre list, on top of the window
     const el = ewF(kind); if (!el || !ew) return; const cur = el.value.trim();
@@ -1240,12 +1405,20 @@
     const dd = ev.target.closest('[data-dd]'); if (dd) { if (ewM && ewM.k === dd.dataset.dd) return ewMenuClose(); ewF(dd.dataset.dd).focus({ preventScroll: true }); return ewMenuOpen(dd.dataset.dd, false, true); }
     const pk = ev.target.closest('[data-pk]'); if (pk) return ewPk(pk.dataset.pk);
     const fd = ev.target.closest('[data-fd]'); if (fd) return ewFd(fd.dataset.fd);
+    if (ev.target.closest('#ewAddLine')) { const v = ewRead(), n = ewLineCount(v); $('#ewLines').insertAdjacentHTML('beforeend', ewLineHtml(n, 1)); ewF(`s${n}_q`).value = '1'; ewCalc(); const c = ewF(`s${n}_code`); c.focus(); c.scrollIntoView({ block: 'nearest' }); return; }
+    const am = ev.target.closest('[data-addm]'); if (am) { const i = +am.dataset.addm, n = ewModCount(ewRead(), i); ewF(`s${i}_mods`).insertAdjacentHTML('beforeend', ewModRow(i, n)); ewF(`s${i}_m${n}`).focus(); return; }
+    const dl = ev.target.closest('[data-dline]'); if (dl) {   // remove a line: shift the lines below up (ids stay s0…sN)
+      const v = ewRead(), i = +dl.dataset.dline, L = ewLinesRead(v); L.splice(i, 1); ewMenuClose();
+      const nv = {}; for (const k of Object.keys(v)) if (!/^s\d+_/.test(k)) nv[k] = v[k];
+      L.forEach((l, n) => { nv[`s${n}_code`] = l.code; nv[`s${n}_dx`] = l.dx; nv[`s${n}_q`] = l.q; l.mods.concat([{ c: '', u: '' }]).forEach((m, j) => { nv[`s${n}_m${j}`] = m.c; nv[`s${n}_u${j}`] = m.u; }); });
+      let h = ''; for (let n = 0; n < ewLineCount(nv); n++) h += ewLineHtml(n, ewModCount(nv, n)); $('#ewLines').innerHTML = h; ewFill(nv); ewCalc(); return; }
   });
+  $('#ewBody').addEventListener('change', () => ewCalc());
   $('#ewMenu').addEventListener('mousedown', ev => ev.preventDefault());   // a mouse click keeps the focus in the field (touch: the pick puts it back)
   $('#ewMenu').addEventListener('click', ev => { const b = ev.target.closest('.ewo'); if (b) ewChoose(+b.dataset.i); });
-  const EW_LIVE = { fee: 1, dx: 1, mod1: 1, mod2: 1, fno: 1, fcen: 1, name: 1, refNm: 1, refId: 1 };
+  const EW_LIVE = { fee: 1, dx: 1, mod: 1, fno: 1, fcen: 1, name: 1, refNm: 1, refId: 1, skill: 1 };
   $('#ewBody').addEventListener('input', ev => { const el = ev.target.closest('.ewi'); if (!el) return; const k = el.dataset.k; if (k === 'fno' && ew) ew.fno = null; $('#ewErr').textContent = '';
-    if ((ewM && ewM.k === k) || (EW_LIVE[k] && ewTok(k, el.value).length >= (k === 'name' ? 2 : 1))) ewMenuOpen(k); else if (ewM && ewM.k === k) ewMenuClose(); });
+    ewCalc(); if ((ewM && ewM.k === k) || (EW_LIVE[ewKind(k)] && ewTok(k, el.value).length >= (k === 'name' ? 2 : 1))) ewMenuOpen(k); else if (ewM && ewM.k === k) ewMenuClose(); });
   $('#ewBody').addEventListener('focusin', ev => { const el = ev.target.closest('.ewi'); if (el && ewM && ewM.k !== el.dataset.k) ewMenuClose(); });
   $('#ewDlg').addEventListener('keydown', ev => {
     if (!ew || ev.isComposing) return; const k = ev.key, el = ev.target.closest && ev.target.closest('.ewi');
