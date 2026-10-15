@@ -1044,7 +1044,7 @@
   function ewLines(e) {
     const cs = (e && e.codes) || [], m1 = normModsL(e && modOf(e, 1)), m2 = normModsL(e && modOf(e, 2));
     const rest = cs.slice(1).flatMap(c => normModsL(c.mods)), ok = cs.length > 1 && rest.join(',') === normModsL(m2.join(',')).join(',');   // per-line modifiers still match Modifier code 2
-    const L = cs.map((c, i) => ({ code: c.c || '', dx: c.dx || '', q: String(c.q || 1), mods: (i === 0 ? m1 : ok ? normModsL(c.mods) : i === 1 ? m2 : []).map(x => ({ c: x, u: ((c.mu || {})[x] != null ? c.mu[x] : (e.modU || {})[x]) || '' })) }));
+    const L = cs.map((c, i) => ({ code: c.c || '', dx: c.dx || '', q: String(c.q || 1), sd: c.sd || '', mods: (i === 0 ? m1 : ok ? normModsL(c.mods) : i === 1 ? m2 : []).map(x => ({ c: x, u: ((c.mu || {})[x] != null ? c.mu[x] : (e.modU || {})[x]) || '' })) }));
     if (!L.length) L.push({ code: '', dx: (e && (e.dx || R.dxList(e)[0])) || '', q: '1', mods: m1.map(x => ({ c: x, u: (e && (e.modU || {})[x]) || '' })) });
     return L;
   }
@@ -1055,7 +1055,7 @@
       fno: e ? facNoOf(e) || '' : '', fcen: e ? fcenOf(e) || '' : '', refNm: (e && e.refNm) || '', refId: (e && e.refId) || '', note: e ? billingNoteOf(e) || '' : '' };
     for (const k of EW_MA) v[k] = ma[k] != null ? String(ma[k]) : (k === 'prov' || k === 'skill' || k === 'ba' ? d[k] || '' : '');
     for (const k of EW_CHK) v[k] = (ma[k] != null ? ma[k] : k === 'general') ? 'on' : '';
-    ewLines(e).forEach((l, i) => { v[`s${i}_code`] = l.code; v[`s${i}_dx`] = l.dx; v[`s${i}_q`] = l.q; l.mods.concat([{ c: '', u: '' }]).forEach((m, j) => { v[`s${i}_m${j}`] = m.c; v[`s${i}_u${j}`] = m.u ? R.p2(+m.u) : ''; }); });
+    ewLines(e).forEach((l, i) => { v[`s${i}_code`] = l.code; v[`s${i}_dx`] = l.dx; v[`s${i}_q`] = l.q; v[`s${i}_sd`] = l.sd || (e ? R.encDay(e) : (ew && ew.day) || ''); l.mods.concat([{ c: '', u: '' }]).forEach((m, j) => { v[`s${i}_m${j}`] = m.c; v[`s${i}_u${j}`] = m.u ? R.p2(+m.u) : ''; }); });
     return v;
   }
   function ewFld(f, key) {
@@ -1076,11 +1076,11 @@
   }
   function ewLineHtml(i, nm) {
     let mods = ''; for (let j = 0; j < nm; j++) mods += ewModRow(i, j);
-    return `<section class="ewline" data-line="${i}"><div class="ewlh"><b>Billing line ${i + 1}</b><span class="ewpay" id="ew_s${i}_pay" title="Expected payment for this line">–</span>${i ? `<button type="button" class="ewdel" data-dline="${i}" title="Remove this billing line" aria-label="Remove billing line ${i + 1}">✕</button>` : ''}</div><div class="ewgrid">`
+    return `<section class="ewline" data-line="${i}"><div class="ewlh"><b>Billing line ${i + 1}</b><span class="ewpay" id="ew_s${i}_pay" data-pay="${i}" title="Expected payment for this line">–</span>${i ? `<button type="button" class="ewdel" data-dline="${i}" title="Remove this billing line" aria-label="Remove billing line ${i + 1}">✕</button>` : ''}</div><div class="ewgrid">`
       + ewFld({ k: 'code', l: 'Fee code', mono: 1, cap: 'characters', fd: 'fee', hint: 1 }, `s${i}_code`) + ewFld({ k: 'dx', l: 'ICD-9 diagnosis', mono: 1, cap: 'characters', fd: 'dx', hint: 1 }, `s${i}_dx`)
-      + ewFld({ k: 'q', l: 'Calls', mono: 1, im: 'numeric', max: 3 }, `s${i}_q`) + `<div class="ewf ro"><span class="ewl">Service date</span><output class="ewro mono" data-sdate></output></div>`
+      + ewFld({ k: 'q', l: 'Calls', mono: 1, im: 'numeric', max: 3 }, `s${i}_q`) + `<div class="ewf" data-f="s${i}_sd"><label class="ewl" for="ew_s${i}_sd">Service date</label><div class="ewin"><input type="date" id="ew_s${i}_sd" data-k="s${i}_sd" class="ewi mono" aria-label="Billing line ${i + 1}, service date"></div></div>`
       + `<div class="ewf sp4"><span class="ewl">Modifiers and units <button type="button" class="ewx ewaddm" data-addm="${i}" tabindex="-1">＋ Modifier</button><button type="button" class="ewx" data-fd="mod${i ? 2 : 1}" tabindex="-1" title="Save, then pick a modifier in Fee Desk">Fee Desk ↗</button></span><div class="ewmods" id="ew_s${i}_mods">${mods}</div></div>`
-      + `<p class="ewbrk small muted sp4" id="ew_s${i}_brk"></p></div></section>`;
+      + `<div class="ewf ewpayc"><span class="ewl">Expected pay</span><output class="ewpayv mono" data-pay="${i}">–</output></div><p class="ewbrk small muted sp4" id="ew_s${i}_brk"></p></div></section>`;
   }
   function ewHtml(v) {
     const n = ewLineCount(v), head = EW_HEAD.filter(f => !f.ref || refOn());
@@ -1111,7 +1111,7 @@
     const out = [];
     for (let i = 0; i < ewLineCount(v); i++) {
       const mods = []; for (let j = 0; j < ewModCount(v, i); j++) { const c = String(v[`s${i}_m${j}`] || '').trim().toUpperCase(); if (c) mods.push({ c, u: String(v[`s${i}_u${j}`] || '').trim(), j }); }
-      out.push({ i, code: String(v[`s${i}_code`] || '').trim().toUpperCase(), dx: String(v[`s${i}_dx`] || '').trim().toUpperCase(), q: String(v[`s${i}_q`] || '').trim(), mods });
+      out.push({ i, code: String(v[`s${i}_code`] || '').trim().toUpperCase(), dx: String(v[`s${i}_dx`] || '').trim().toUpperCase(), q: String(v[`s${i}_q`] || '').trim(), sd: String(v[`s${i}_sd`] || '').trim(), mods });
     }
     return out;
   }
@@ -1148,7 +1148,7 @@
       const n = l.i + 1, hit = l.code && o && o.byNorm.get(norm(l.code)), h1 = ewF(`s${l.i}_code_h`), h2 = ewF(`s${l.i}_dx_h`);
       if (h1) h1.textContent = l.code ? (hit ? hit.d : (o ? 'Not in the bundled Alberta schedule' : '')) : '';
       if (h2) h2.textContent = l.dx ? (dxDesc(dxCode(l.dx)) || (ICD ? 'Not in the bundled ICD-9 list' : '')) : '';
-      const pay = ewF(`s${l.i}_pay`), brk = ewF(`s${l.i}_brk`);
+      const pays = $$(`#ewBody [data-pay="${l.i}"]`), pay = { set textContent(t) { pays.forEach(x => { x.textContent = t; }); } }, brk = ewF(`s${l.i}_brk`);
       if (!l.code) { if (pay) pay.textContent = '–'; if (brk) brk.textContent = ''; if (l.dx || l.mods.length) chk.push(`Billing line ${n}: no fee code yet`); continue; }
       if (o && !hit) chk.push(`Billing line ${n}: ${l.code} is not in the bundled Alberta schedule (check the code)`);
       if (l.q && !/^\d{1,3}$/.test(l.q)) chk.push(`Billing line ${n}: calls must be a number`);
@@ -1175,7 +1175,8 @@
     if (!String(v.tin || '').trim()) chk.push('No In time');
     const ul = $('#ewChecks'); if (ul) { ul.innerHTML = chk.length ? chk.map(x => `<li>${esc(x)}</li>`).join('') : '<li class="ok">No problems found</li>'; ul.parentNode.classList.toggle('has', chk.length > 0); }
     const tt = $('#ewTotal'); if (tt) tt.textContent = priced ? money(total) : '–';
-    $$('#ewBody [data-sdate]').forEach(x => { x.textContent = R.fmtDay(ew.day); });
+    for (const l of lines) if (l.sd && l.sd !== ew.day) chk.push(`Billing line ${l.i + 1}: service date ${R.fmtDay(l.sd)} differs from the encounter day`);
+    if (ul) { ul.innerHTML = chk.length ? chk.map(x => `<li>${esc(x)}</li>`).join('') : '<li class="ok">No problems found</li>'; ul.parentNode.classList.toggle('has', chk.length > 0); }
   }
   function ewRows(root, day) {
     const t = root && root.querySelector(`table.grid[data-day="${CSS.escape(day)}"]`); if (!t) return [];
@@ -1196,7 +1197,7 @@
       ew.init = ewVals(e2); if (e2 && facNoOf(e2)) ew.fno = { no: facNoOf(e2), n: R.facNmTxt(e2) };
       const d = $('#ewDlg'); $('#ewBody').innerHTML = ewHtml(ew.init); d.classList.toggle('phone', SHEET());
       ewFill(ew.init);
-      ewHead(e2, tr2); $('#ewErr').textContent = ''; ewMenuClose();
+      d.classList.toggle('wide', !!S.settings.ewWide); d.style.width = ''; ewHead(e2, tr2); $('#ewErr').textContent = ''; ewMenuClose();
       if (!d.open) d.showModal(); d.querySelector('.ewbody').scrollTop = 0;
       const first = ewF('name'); if (first && (FINE() || !COARSE())) { first.focus({ preventScroll: true }); first.select(); } else $('#ewT').setAttribute('tabindex', '-1'), $('#ewT').focus({ preventScroll: true });
       if (!AHF) loadAhf().catch(() => {}); ewCalc(); Promise.all([loadFees(), codesFor((S.settings.prov) || 'AB').catch(() => {}), loadIcd().catch(() => {})]).then(() => ewCalc());
@@ -1250,6 +1251,7 @@
           const x = Object.assign({}, was, norm(was.c) === norm(l.code) ? {} : hit ? { c: hit.c, k: hit.k || hit.c, d: hit.d || '', j: prov, f: hit.f || '' } : { c: l.code, k: l.code, d: '', j: prov, f: '' });
           if (l.dx) { x.dx = dxCode(l.dx) || l.dx; x.dxd = dxDesc(x.dx) || ''; } else { delete x.dx; delete x.dxd; }
           const q = parseInt(l.q, 10) || 1; if (q > 1) x.q = q; else delete x.q;
+          if (/^\d{4}-\d\d-\d\d$/.test(l.sd) && l.sd !== (isNew ? day : R.encDay(e))) x.sd = l.sd; else delete x.sd;
           if (idx > 0 && l.mods.length) x.mods = l.mods.map(m => m.c).join(', '); else delete x.mods;
           const mu = {}; for (const m of l.mods) if (m.u) mu[m.c] = +m.u; if (Object.keys(mu).length) x.mu = mu; else delete x.mu;
           return x;
@@ -1277,6 +1279,7 @@
   }
   $('#ewForm').addEventListener('submit', async ev => { ev.preventDefault(); if (await ewSave()) { toast('Saved'); ewClose(); } });
   $('#ewCancel').addEventListener('click', () => { const n = ewChanged().length; ewClose(); if (n) toast('Changes not saved'); });
+  $('#ewWide').addEventListener('click', () => { const d = $('#ewDlg'), on = !d.classList.contains('wide'); d.classList.toggle('wide', on); d.style.width = ''; S.settings.ewWide = on; saveSettings().catch(() => {}); $('#ewWide').setAttribute('aria-pressed', String(on)); ewMenuPlace(); });
   $('#ewPrev').addEventListener('click', () => ewStep(-1));
   $('#ewNext').addEventListener('click', () => ewStep(1));
   $('#ewDlg').addEventListener('cancel', ev => { ev.preventDefault(); if (!$('#ewMenu').hidden) return ewMenuClose(); $('#ewCancel').click(); });
@@ -1405,12 +1408,12 @@
     const dd = ev.target.closest('[data-dd]'); if (dd) { if (ewM && ewM.k === dd.dataset.dd) return ewMenuClose(); ewF(dd.dataset.dd).focus({ preventScroll: true }); return ewMenuOpen(dd.dataset.dd, false, true); }
     const pk = ev.target.closest('[data-pk]'); if (pk) return ewPk(pk.dataset.pk);
     const fd = ev.target.closest('[data-fd]'); if (fd) return ewFd(fd.dataset.fd);
-    if (ev.target.closest('#ewAddLine')) { const v = ewRead(), n = ewLineCount(v); $('#ewLines').insertAdjacentHTML('beforeend', ewLineHtml(n, 1)); ewF(`s${n}_q`).value = '1'; ewCalc(); const c = ewF(`s${n}_code`); c.focus(); c.scrollIntoView({ block: 'nearest' }); return; }
+    if (ev.target.closest('#ewAddLine')) { const v = ewRead(), n = ewLineCount(v); $('#ewLines').insertAdjacentHTML('beforeend', ewLineHtml(n, 1)); ewF(`s${n}_q`).value = '1'; ewF(`s${n}_sd`).value = (ewF('s0_sd') || {}).value || ew.day; ewCalc(); const c = ewF(`s${n}_code`); c.focus(); c.scrollIntoView({ block: 'nearest' }); return; }
     const am = ev.target.closest('[data-addm]'); if (am) { const i = +am.dataset.addm, n = ewModCount(ewRead(), i); ewF(`s${i}_mods`).insertAdjacentHTML('beforeend', ewModRow(i, n)); ewF(`s${i}_m${n}`).focus(); return; }
     const dl = ev.target.closest('[data-dline]'); if (dl) {   // remove a line: shift the lines below up (ids stay s0…sN)
       const v = ewRead(), i = +dl.dataset.dline, L = ewLinesRead(v); L.splice(i, 1); ewMenuClose();
       const nv = {}; for (const k of Object.keys(v)) if (!/^s\d+_/.test(k)) nv[k] = v[k];
-      L.forEach((l, n) => { nv[`s${n}_code`] = l.code; nv[`s${n}_dx`] = l.dx; nv[`s${n}_q`] = l.q; l.mods.concat([{ c: '', u: '' }]).forEach((m, j) => { nv[`s${n}_m${j}`] = m.c; nv[`s${n}_u${j}`] = m.u; }); });
+      L.forEach((l, n) => { nv[`s${n}_code`] = l.code; nv[`s${n}_dx`] = l.dx; nv[`s${n}_q`] = l.q; nv[`s${n}_sd`] = l.sd; l.mods.concat([{ c: '', u: '' }]).forEach((m, j) => { nv[`s${n}_m${j}`] = m.c; nv[`s${n}_u${j}`] = m.u; }); });
       let h = ''; for (let n = 0; n < ewLineCount(nv); n++) h += ewLineHtml(n, ewModCount(nv, n)); $('#ewLines').innerHTML = h; ewFill(nv); ewCalc(); return; }
   });
   $('#ewBody').addEventListener('change', () => ewCalc());

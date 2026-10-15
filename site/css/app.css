@@ -972,3 +972,43 @@ table.grid tbody tr.act>td.c-name .rew{display:block}
 .ewtot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;border-top:1px solid var(--line);background:var(--teal-l);font-weight:600}
 .ewtot b{font-size:1.15rem;color:var(--teal-d)}
 @media (max-width:767px){.ewline .ewgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.ewline .ewf.sp4,.ewline .ewf:nth-child(1),.ewline .ewf:nth-child(2){grid-column:1 / -1}.ewft .ewkeys{display:none}}
+/* v9u: compact entry window, resizable / wider, one-row billing lines when wide */
+dialog.ewdlg{resize:both;overflow:hidden;min-width:min(560px,100vw);min-height:320px}
+dialog.ewdlg.wide{width:min(1680px,calc(100vw - 24px))}
+.ewbox{container-type:inline-size;height:100%}
+.ewhd{padding:6px 10px 4px}.ewtt h3{font-size:.95rem}.ewnav button{min-height:28px;padding:2px 9px;font-size:.82rem}
+.ewbody{padding:4px 8px 6px}
+.ewg{margin:4px 0;padding:2px 8px 6px;border-radius:8px}.ewg legend{font-size:.68rem}
+.ewgrid{gap:4px 8px}
+.ewl{font-size:.7rem}
+.ewin{border-radius:6px}
+.ewin .ewi{padding:3px 6px;font-size:13px;min-height:26px;border-radius:6px}
+.ewin textarea.ewi{min-height:40px}
+.ewdd,.ewx{padding:0 6px;min-width:24px;font-size:.8rem}.ewx{font-size:.7rem}
+.ewf.ro .ewro{padding:4px 2px;font-size:13px}
+.ewlines{gap:5px;margin:5px 0 3px}.ewline{padding:3px 8px 5px;border-radius:8px}
+.ewlh{margin:0 0 3px;gap:8px}.ewlh b{font-size:.8rem}.ewpay{font-size:.8rem;padding:1px 8px}.ewdel{min-width:24px;min-height:24px;font-size:.85rem}
+.ewh{font-size:.7rem}.ewbrk{font-size:.7rem}
+.ewmods{gap:4px 8px}.ewmod{gap:3px}.ewmod .ewin{width:7.2em}
+.ewi.ewu{width:3.3em;padding:3px 4px;font-size:13px;min-height:26px;border-radius:6px}
+.ewl .ewx{min-height:18px;padding:0 6px;margin-left:4px}
+.ewaddl{min-height:28px;margin:2px 0 4px;font-size:.82rem;border-radius:8px}
+.ewchk{font-size:.8rem}.ewchks{padding:3px 0}
+.ewchecks{padding:3px 10px;margin:4px 0;border-radius:8px}.ewchecks b{font-size:.74rem}.ewchecks ul{font-size:.78rem;margin:2px 0}
+.ewtot{padding:5px 12px;font-size:.88rem}.ewtot b{font-size:1rem}
+.ewft{padding:5px 10px 7px}.ewft button{min-height:30px;padding:3px 14px}.ewft .ewkeys{font-size:.72rem}
+.ewo{padding:4px 8px;min-height:26px;font-size:.85rem}
+.ewpayc{display:none}.ewpayv{display:block;padding:4px 2px;font-weight:700;color:var(--teal-d);font-size:13px}
+@container (min-width:1100px){
+  .ewline .ewgrid{grid-template-columns:minmax(0,1.25fr) minmax(0,1.25fr) minmax(0,.45fr) minmax(0,.85fr) minmax(0,2.4fr) minmax(0,.6fr)}
+  .ewline .ewgrid>.ewf.sp4{grid-column:auto}.ewline .ewgrid>.ewbrk{grid-column:1 / -1}
+  .ewpayc{display:flex}.ewlh .ewpay{display:none}
+  .ewg>.ewgrid{grid-template-columns:repeat(6,minmax(0,1fr))}
+}
+@media (max-width:767px){
+  dialog.ewdlg{resize:none}
+  .ewin .ewi,.ewi.ewu{font-size:16px;min-height:34px;padding:4px 7px}
+  .ewnav button{min-height:34px}.ewft button{min-height:38px}
+  .ewdd,.ewx{min-width:32px}
+  .ewmod .ewin{width:8.5em}.ewi.ewu{width:3.6em}
+}
