@@ -41,7 +41,7 @@
   if (IOS) { const vm = document.querySelector('meta[name=viewport]'); if (vm && !/maximum-scale/.test(vm.content)) vm.content += ', maximum-scale=1'; }
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + '-' + Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('');
-  const DEF = { defSetting: 'H', autolock: 2, prov: 'AB', curFac: null, favFac: [], customFac: [], bkEvery: 30, lastBackup: 0, bkSnooze: 0, abOn: false, abEvery: 60, abKeep: 24, abFmts: [], abZip: true, abPwMode: 'passcode', abNotes: false, abLoc: '',
+  const DEF = { defSetting: 'H', autolock: 10, prov: 'AB', curFac: null, favFac: [], customFac: [], bkEvery: 30, lastBackup: 0, bkSnooze: 0, abOn: false, abEvery: 60, abKeep: 24, abFmts: [], abZip: true, abPwMode: 'passcode', abNotes: false, abLoc: '',
     warnA: 60, warnR: 180, favSets: [], reviews: {}, revEdited: {}, holOff: [], holExtra: [],
     favFno: [], recFno: [], customFno: [], favFcen: [], fcCarry: true, refCol: true, recRef: [], fcLast: null, premWarn: true, premMax: {} };   // v9o: Facility # / Functional centre favourites, recent, carry-down   // v5: timer warnings, code sets, review marks, holidays
   const kindOf = R.kindOf, clone = o => JSON.parse(JSON.stringify(o));
@@ -69,11 +69,13 @@
   const today = () => R.dayKey(Date.now());
 
   // ------------------------------------------------------------ lock / unlock
-  const failKey = 'bl.fail';
+  const failKey = 'bl.fail', HAD_KEY = 'bl.had';   // v9v: marks that a vault existed here (no patient data), to explain browser storage eviction
   const fails = () => { try { return JSON.parse(localStorage.getItem(failKey)) || { n: 0, until: 0 }; } catch (e) { return { n: 0, until: 0 }; } };
   async function showLock(msg) {
     document.body.classList.add('locked');
     const has = await V.exists();
+    let had = null; try { had = localStorage.getItem(HAD_KEY); } catch (e) { had = null; }
+    if (!has && had && !msg) msg = `This browser removed the app's saved data for this site (last used ${had}). Your passcode and logs were kept only in this browser's storage; restore from your encrypted backup after creating a new passcode.`;
     $('#setupForm').hidden = has; $('#unlockForm').hidden = !has; $('#lockMsg').textContent = msg || '';
     const auto = !showLock.booted || document.visibilityState === 'hidden'; showLock.booted = true;
     if (!has) { kindUi(); setTimeout(() => $('#sPass').focus(), 50); return; }
@@ -278,6 +280,9 @@
   $$('#manBody [data-go]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); const t = document.getElementById(a.dataset.go); if (t) t.scrollIntoView({ block: 'start' }); }));
   async function afterUnlock(first) {
     const settings = Object.assign({}, DEF, await V.loadSettings());
+    if (!first && !settings.autolockSet && settings.autolock === 2) { settings.autolock = 10; settings.autolockSet = false; await V.saveSettings(settings); }   // v9v: old 2-min default → 10 min (a chosen value is kept)
+    try { localStorage.setItem(HAD_KEY, R.fmtDay(today())); } catch (e) { /* storage blocked */ }
+    persistAsk();
     const encs = await V.loadAll();
     S = { encs, settings };
     await migrateNotes();
@@ -306,10 +311,22 @@
   ['pointerdown', 'keydown', 'input', 'wheel', 'touchstart'].forEach(t => document.addEventListener(t, () => { lastAct = Date.now(); }, { passive: true, capture: true }));
   setInterval(() => {
     if (S && fdSince && picking && Date.now() - fdSince > FD_GRACE) { picking = 0; fdSince = 0; lockNow('Locked after 10 minutes in Fee Desk.'); return; }   // v9g: the pick grace has a limit
-    if (S && !picking && Date.now() - lastAct > (S.settings.autolock || 2) * 60000) lockNow('Locked after inactivity.');
+    if (S && !picking && Date.now() - lastAct > (S.settings.autolock || 10) * 60000) lockNow('Locked after inactivity.');
   }, 5000);
-  document.addEventListener('visibilitychange', () => { if (document.hidden && S && !picking) lockNow('Locked because the app went to the background.'); });
-  window.addEventListener('pagehide', () => { if (S && !picking) lockNow(); });
+  // v9v: switching tabs / apps no longer locks. It locks after the inactivity time (counted while away too) or Lock now.
+  // If the page was frozen / suspended by the system for longer than the auto-lock time, it locks on return.
+  let hiddenAt = 0;
+  const awayCheck = () => { if (S && !picking && hiddenAt && Date.now() - Math.max(hiddenAt, lastAct) > (S.settings.autolock || 10) * 60000) lockNow('Locked after inactivity.'); hiddenAt = 0; };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { hiddenAt = Date.now(); if (S) undoFlush(); } else awayCheck(); });
+  window.addEventListener('pagehide', ev => { if (!S) return; undoFlush(); if (!ev.persisted && !picking) lockNow(); else hiddenAt = hiddenAt || Date.now(); });
+  window.addEventListener('pageshow', ev => { if (ev.persisted) awayCheck(); });
+  document.addEventListener('resume', awayCheck);
+  // v9v: ask the browser to keep this site's storage (not cleared under storage pressure / inactivity); shown in Settings
+  async function persistAsk() {
+    const el = $('#persistInfo'); let ok = null;
+    try { if (navigator.storage && navigator.storage.persisted) { ok = await navigator.storage.persisted(); if (!ok && navigator.storage.persist) ok = await navigator.storage.persist(); } } catch (e) { ok = null; }
+    if (el) el.textContent = ok ? 'Storage: kept permanently on this computer (the browser will not clear it on its own).' : ok === false ? 'Storage: the browser has not agreed to keep this site’s data permanently. Install the app (Add to Home Screen / Install app), bookmark it, and keep an encrypted backup; some browsers clear site data after a period of disuse or when “clear data on exit” is on.' : 'Storage: this browser cannot report whether data is kept permanently.';
+  }
   // file pickers / share sheets briefly hide the page; don't lock for those
   function pickStart() { picking++; }
   function pickEnd() { setTimeout(() => { picking = Math.max(0, picking - 1); lastAct = Date.now(); }, 800); }
@@ -1197,7 +1214,7 @@
       ew.init = ewVals(e2); if (e2 && facNoOf(e2)) ew.fno = { no: facNoOf(e2), n: R.facNmTxt(e2) };
       const d = $('#ewDlg'); $('#ewBody').innerHTML = ewHtml(ew.init); d.classList.toggle('phone', SHEET());
       ewFill(ew.init);
-      d.classList.toggle('wide', !!S.settings.ewWide); d.style.width = ''; ewHead(e2, tr2); $('#ewErr').textContent = ''; ewMenuClose();
+      d.classList.toggle('wide', !!S.settings.ewWide); d.style.width = S.settings.ewW && !SHEET() ? Math.min(S.settings.ewW, innerWidth - 24) + 'px' : ''; d.style.height = ''; ewHead(e2, tr2); $('#ewErr').textContent = ''; ewMenuClose();
       if (!d.open) d.showModal(); d.querySelector('.ewbody').scrollTop = 0;
       const first = ewF('name'); if (first && (FINE() || !COARSE())) { first.focus({ preventScroll: true }); first.select(); } else $('#ewT').setAttribute('tabindex', '-1'), $('#ewT').focus({ preventScroll: true });
       if (!AHF) loadAhf().catch(() => {}); ewCalc(); Promise.all([loadFees(), codesFor((S.settings.prov) || 'AB').catch(() => {}), loadIcd().catch(() => {})]).then(() => ewCalc());
@@ -1270,7 +1287,8 @@
       o.init = ewVals(e); res(true);
     }));
   }
-  function ewClose() { ewMenuClose(); const d = $('#ewDlg'); if (d.open) d.close(); const o = ew; ew = null; if (o) { const t = o.root.querySelector(`table.grid[data-day="${CSS.escape(o.day)}"]`), tr = t && (o.id ? t.querySelector(`tr[data-id="${CSS.escape(o.id)}"]`) : null), c = tr && tr.querySelector('.gc[data-c="name"]'); if (c && FINE()) setTimeout(() => focusCell(c), 0); } }
+  function ewClose() { ewMenuClose(); const d = $('#ewDlg');
+    if (S && d.open && d.style.width && !SHEET()) { const w = Math.round(d.getBoundingClientRect().width); if (w && w !== S.settings.ewW) { S.settings.ewW = w; saveSettings().catch(() => {}); } } if (d.open) d.close(); const o = ew; ew = null; if (o) { const t = o.root.querySelector(`table.grid[data-day="${CSS.escape(o.day)}"]`), tr = t && (o.id ? t.querySelector(`tr[data-id="${CSS.escape(o.id)}"]`) : null), c = tr && tr.querySelector('.gc[data-c="name"]'); if (c && FINE()) setTimeout(() => focusCell(c), 0); } }
   async function ewStep(dir) {
     if (!ew) return; if (!(await ewSave())) return;
     await gQ; await new Promise(r => requestAnimationFrame(r));
@@ -1279,7 +1297,7 @@
   }
   $('#ewForm').addEventListener('submit', async ev => { ev.preventDefault(); if (await ewSave()) { toast('Saved'); ewClose(); } });
   $('#ewCancel').addEventListener('click', () => { const n = ewChanged().length; ewClose(); if (n) toast('Changes not saved'); });
-  $('#ewWide').addEventListener('click', () => { const d = $('#ewDlg'), on = !d.classList.contains('wide'); d.classList.toggle('wide', on); d.style.width = ''; S.settings.ewWide = on; saveSettings().catch(() => {}); $('#ewWide').setAttribute('aria-pressed', String(on)); ewMenuPlace(); });
+  $('#ewWide').addEventListener('click', () => { const d = $('#ewDlg'), on = !d.classList.contains('wide'); d.classList.toggle('wide', on); d.style.width = ''; delete S.settings.ewW; S.settings.ewWide = on; saveSettings().catch(() => {}); $('#ewWide').setAttribute('aria-pressed', String(on)); ewMenuPlace(); });
   $('#ewPrev').addEventListener('click', () => ewStep(-1));
   $('#ewNext').addEventListener('click', () => ewStep(1));
   $('#ewDlg').addEventListener('cancel', ev => { ev.preventDefault(); if (!$('#ewMenu').hidden) return ewMenuClose(); $('#ewCancel').click(); });
@@ -1560,8 +1578,8 @@
     return c ? `Functional centre ${c} set in spreadsheet` : 'Functional centre cleared in spreadsheet';
   }
   // carry-down: a new row starts with the Facility # / Functional centre picked last on that day (Settings can turn it off)
-  function fcLastFor(day) {
-    const l = S.settings.fcLast, out = l && l.day === day ? { no: l.no || '', n: l.n || '', fcen: l.fcen || '' } : { no: '', n: '', fcen: '' };
+  function fcLastFor(day) {   // v9v: falls back to the last pick on any earlier day, so a new day starts with your usual facility
+    const l = S.settings.fcLast, out = l && (l.day === day || (l.day || '') < day) ? { no: l.no || '', n: l.n || '', fcen: l.fcen || '' } : { no: '', n: '', fcen: '' };
     if (!out.no || !out.fcen) {   // nothing picked yet today on this device: the row of that day changed last that has them
       const src = S.encs.filter(x => kindOf(x) !== 'shift' && R.encDay(x) === day).sort((a, b) => (b.updated || b.created || 0) - (a.updated || a.created || 0));
       if (!out.no) { const x = src.find(y => facNoOf(y)); if (x) { out.no = facNoOf(x); out.n = R.facNmTxt(x); } }
@@ -1574,7 +1592,7 @@
     const l = fcLastFor(day), got = [];
     if (!facNoOf(e) && l.no) { e.facNo = l.no; if (l.n) e.facNm = l.n; else delete e.facNm; got.push('Facility # ' + l.no); }
     if (!fcenOf(e) && l.fcen) { e.fcen = l.fcen; got.push('Functional centre ' + l.fcen); }
-    return got.length ? got.join(' and ') + ' carried down from the last pick that day' : '';
+    return got.length ? got.join(' and ') + ' carried down from your last pick' : '';
   }
   async function fcRemember(day, kind, v) {
     const st = S.settings; let l = st.fcLast && st.fcLast.day === day ? Object.assign({}, st.fcLast) : { day };
@@ -3254,7 +3272,7 @@
   $('#defProv').onchange = () => { S.settings.prov = $('#defProv').value; saveSettings(); };
   $('#warnA').onchange = () => { S.settings.warnA = +$('#warnA').value; saveSettings(); render(); };
   $('#warnR').onchange = () => { S.settings.warnR = +$('#warnR').value; saveSettings(); render(); };
-  $('#autolock').onchange = () => { S.settings.autolock = +$('#autolock').value; saveSettings(); toast(`Auto-lock after ${S.settings.autolock} min`); };
+  $('#autolock').onchange = () => { S.settings.autolock = +$('#autolock').value; S.settings.autolockSet = true; saveSettings(); toast(`Auto-lock after ${S.settings.autolock} min`); };
   $('#chPass').onclick = async () => {
     const cur0 = await V.kind().catch(() => '');
     const v = await ask({ title: 'Change passcode / passphrase', text: 'All encounters and photos will be re-encrypted with the new one. A numeric passcode needs 6+ digits; a passphrase needs 12+ characters (words and spaces allowed). A forgotten passcode or passphrase means the data cannot be recovered. Face ID / Touch ID / passkey / quick PIN unlock is turned off and must be set up again.', ok: 'Change',
@@ -3647,7 +3665,7 @@
   let procId = null, wake = null;
   async function keepAwake() { try { if ('wakeLock' in navigator && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { wake = null; } }
   function stopWake() { if (wake) { wake.release().catch(() => {}); wake = null; } }
-  function openProc(e) { procId = e.id; procTick(); $('#pcNote').textContent = 'Time only. ' + ('wakeLock' in navigator ? 'The screen stays on' : 'This browser cannot keep the screen on') + `; auto-lock still applies (${S.settings.autolock || 2} min without a touch).`; $('#procDlg').showModal(); keepAwake(); }
+  function openProc(e) { procId = e.id; procTick(); $('#pcNote').textContent = 'Time only. ' + ('wakeLock' in navigator ? 'The screen stays on' : 'This browser cannot keep the screen on') + `; auto-lock still applies (${S.settings.autolock || 10} min without a touch).`; $('#procDlg').showModal(); keepAwake(); }
   function procTick() {
     if (!procId || !$('#procDlg').open) return; const e = S && S.encs.find(x => x.id === procId); if (!e) { $('#procDlg').close(); return; }
     $('#pcTime').textContent = fmtDur(R.msOf(e)); $('#pcState').textContent = e.status === 'run' ? 'Running' : e.status === 'pause' ? 'Paused' : 'Stopped';
