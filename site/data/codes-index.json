@@ -25,13 +25,12 @@
    "credit": "© Government of Newfoundland and Labrador. Reproduced for reference; not an official version."
   },
   {
-   "id": "NS",
-   "name": "Nova Scotia",
-   "held": true,
-   "n": 0,
-   "title": "Approval pending",
-   "eff": "",
-   "credit": "Code lookup unavailable until permission is granted; type codes manually and confirm them in the official MSI Physician’s Manual."
+   "id": "ON",
+   "name": "Ontario",
+   "n": 5340,
+   "title": "Schedule of Benefits for Physician Services",
+   "eff": "Effective 1 July 2026",
+   "credit": "Source: Ontario Ministry of Health. Schedule of Benefits for Physician Services (effective July 1, 2026): © King's Printer for Ontario, 2026. Reproduced with permission. OHIP Physician Fee Schedule Master: © King's Printer for Ontario, 2026. Reproduced with permission. Reference only. The official Schedule of Benefits governs if there is any difference. The King's Printer for Ontario makes no representation about the accuracy, completeness or currency of this material or its fitness for any particular purpose."
   },
   {
    "id": "SK",
@@ -56,6 +55,15 @@
    "title": "Payment Schedule",
    "eff": "Effective 1 April 2026",
    "credit": "© Government of Yukon 2026. Reproduced for non-commercial reference; not an official version."
+  },
+  {
+   "id": "NS",
+   "name": "Nova Scotia",
+   "held": true,
+   "n": 0,
+   "title": "Approval pending",
+   "eff": "",
+   "credit": "Code lookup unavailable until permission is granted; type codes manually and confirm them in the official MSI Physician’s Manual."
   }
  ]
 }

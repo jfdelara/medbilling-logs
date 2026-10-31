@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build compact fee-code lists for MedBilling Logs from MedBilling Fee Desk's bundled data.
 Source: ../delara-medbilling/public/data (codes.json = Alberta SOMB; data/prov/*.json = live provinces).
-Only jurisdictions marked live in Fee Desk's index.json are used. Held jurisdictions (BC, ON, QC, PE, NB, NS)
+Only jurisdictions marked live in Fee Desk's index.json are used. Held jurisdictions (BC, QC, PE, NB, NS)
 are refused: the build fails if any of them would be bundled.
 Output: public/data/codes-<ID>.json = {"meta": {...credit...}, "codes": [[code, description, feeLabel], ...]}
 and public/data/codes-index.json. Fee labels follow Fee Desk's display (units as printed, no conversion)."""
@@ -9,7 +9,7 @@ import json, os, re, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, '..', 'delara-medbilling', 'public', 'data'))
 OUT = os.path.join(ROOT, 'public', 'data')
-HELD = {'BC', 'ON', 'QC', 'PE', 'NB', 'NS'}
+HELD = {'BC', 'QC', 'PE', 'NB', 'NS'}
 # held but still listed (no data) so a user's saved province setting and typed codes keep working
 SHOW_HELD = {'NS': ('Nova Scotia', 'Code lookup unavailable until permission is granted; type codes manually and confirm them in the official MSI Physician’s Manual.')}
 TXT = {'BR': 'By report', 'FS': 'F/S (included)', 'NC': 'No charge', 'IC': 'Independent consideration'}
@@ -30,6 +30,8 @@ def fee_label(r, m):
     if r.get('fp') is not None or r.get('sp') is not None:
         return ' · '.join(x for x in (f"FP {amt(r['fp'])}" if r.get('fp') is not None else '', f"Spec. {amt(r['sp'])}" if r.get('sp') is not None else '') if x)
     if r.get('f') is not None: return amt(r['f'])
+    if m.get('compNote') and (r.get('pro') is not None or r.get('tec') is not None):   # Ontario: professional / technical components as printed
+        return ' · '.join(x for x in (f"PRO {amt(r['pro'])}" if r.get('pro') is not None else '', f"TEC {amt(r['tec'])}" if r.get('tec') is not None else '') if x)
     if r.get('an') is not None: return f"{r['an']} anaes. units"
     return 'See schedule'
 
@@ -60,6 +62,8 @@ for j in idx['list']:
         if r['c'] not in best or rank < best[r['c']][0]: best[r['c']] = (rank, r)
     codes = [[c, r['d'], fee_label(r, m), c] for c, (_, r) in best.items()]
     credit = m.get('credit') or ''
+    if m.get('legends'):   # licensor legend, verbatim, once per licensed work, plus its disclaimer (shown beside the code list and in reports)
+        credit = 'Source: ' + m.get('publisher', j['name']) + '. ' + ' '.join(f"{l['work']}: {l['text']}" for l in m['legends']) + ' ' + (m.get('governs') or '')
     if not credit:
         credit = f"Source: {m.get('publisher', j['name'])}, {m.get('title', '')}. " + (m.get('licence', {}).get('text', '') if isinstance(m.get('licence'), dict) else '')
     meta = {'id': j['id'], 'name': j['name'], 'title': m.get('title'), 'effective': m.get('effective'), 'effectiveLabel': m.get('effectiveLabel'), 'credit': credit.strip(), 'url': m.get('landing') or m.get('pdf')}
