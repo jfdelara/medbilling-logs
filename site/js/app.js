@@ -53,7 +53,7 @@
   const codeCache = {};    // prov -> {meta, codes, index, byNorm}
   // MedBilling Fee Desk (companion app). Deep links carry only a code that exists in the bundled lists (never free text,
   // so no patient identifier can end up in a URL): #/code/<fee code> and #/medres/<ICD-9 code> are Fee Desk's own routes.
-  const FD_ABS = 'https://tp8p7c4vwr-del.github.io/delara-medbilling/';
+  const FD_ABS = 'https://jfdelara.github.io/delara-medbilling/';
   const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   // the web app and Fee Desk share one origin (GitHub Pages): resolve Fee Desk next to this app, so a local copy pairs with a local Fee Desk
   const FD = !NATIVE && /^https?:$/.test(location.protocol) && /\/medbilling-logs\//.test(location.pathname) ? new URL('../delara-medbilling/', location.origin + location.pathname.replace(/[^/]*$/, '')).href : FD_ABS;
