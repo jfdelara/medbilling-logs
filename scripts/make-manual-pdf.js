@@ -17,7 +17,7 @@ const VERSION = process.env.MAN_VERSION || '9q';
     .cover h1{margin:0;color:#0f5f58;font-size:22pt} .cover p{margin:4pt 0} .cover .sub{color:#555}
     @page{size:Letter;margin:16mm 15mm 16mm}</style></head><body>
     <div class="cover"><h1>MedBilling Logs</h1><p class="sub">User manual · version ${VERSION} · October 2026</p>
-    <p class="sub">https://tp8p7c4vwr-del.github.io/medbilling-logs/ · Part of JFdeLara's Studio</p>
+    <p class="sub">https://jfdelara.github.io/medbilling-logs/ · Part of Medibrisa</p>
     <p>A private time and billing log for physicians. Everything stays on this device, encrypted with your passcode or passphrase. Every export is an AES-256 password-protected .zip. The same manual is built into the app (Settings → Help / User manual) and works offline.</p></div>
     <div class="man">${body}</div></body></html>`;
   const tmp = path.join(PUB, '__manual_print.html'); fs.writeFileSync(tmp, page);

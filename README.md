@@ -1,7 +1,7 @@
 # MedBilling Logs ("MB Logs")
 
-Part of JFdeLara's Studio. A private, offline time and billing log for physicians: encounter timers,
-arrival/departure (time on site), call-backs, fee codes, photos and reports. Live: https://tp8p7c4vwr-del.github.io/medbilling-logs/
+Part of Medibrisa. A private, offline time and billing log for physicians: encounter timers,
+arrival/departure (time on site), call-backs, fee codes, photos and reports. Live: https://jfdelara.github.io/medbilling-logs/
 
 **It is a personal time and billing log, not the patient's medical record.** Chart every encounter in the patient's chart.
 
@@ -82,3 +82,13 @@ Bump `const V` in `public/sw.js`. Then run `bash redeploy.sh` and commit the pri
 
 ## Spreadsheet Today (v9c)
 Today is now a full-width spreadsheet (`table.grid`, shared with History's per-day view): gridlines, grey header and row numbers, sticky header, pinned totals row, at least 15 blank rows, and inline editing with Sheets-style keyboard navigation. Typing a name/MRN into a blank row creates an encrypted not-started encounter (`status: 'new'`, `segs: []`); In starts the clock and Out stops it. Everything else on Today sits in one slim toolbar (date navigator, facility, Arrive/Depart, week totals, + Call-back, Report / share, ⋯ More). On phones the grid scrolls sideways (since v9i nothing is pinned). See `CHANGELOG-v9.md`.
+
+## Switching the web address
+
+Fee Desk's address is the single constant `FD_ABS` in `site/js/app.js` (used when Logs is not served next to Fee Desk, i.e. on its own host).
+The same address is also hard-coded in `site/index.html` (Billing resource card, "Code data from" line, two "For help with…" lines, footer link),
+`README.md`, and `scripts/make-manual-pdf.js` (Logs' own address). Also on a move to separate hosts (feedesk / logs):
+- the `FD` same-origin pairing in `site/js/app.js` (`/medbilling-logs/` → `../delara-medbilling/`) no longer applies, so `FD_ABS` is used;
+- Fee Desk's pick-mode `okReturn()` (in the Fee Desk repo) must accept the new Logs origin;
+- `site/js/shared/move.js` export/import and the iOS wrapper URLs need the new origins;
+- bump the cache name `V` in `site/sw.js`.
