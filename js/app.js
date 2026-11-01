@@ -61,7 +61,7 @@
   const FD_ABS = 'https://feedesk.medibrisa.com/';
   const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   // the web app and Fee Desk share one origin (GitHub Pages): resolve Fee Desk next to this app, so a local copy pairs with a local Fee Desk
-  const FD = !NATIVE && /^https?:$/.test(location.protocol) && /\/medbilling-logs\//.test(location.pathname) ? new URL('../delara-medbilling/', location.origin + location.pathname.replace(/[^/]*$/, '')).href : FD_ABS;
+  const FD = !NATIVE && /^https?:$/.test(location.protocol) && /\/medbilling-logs\//.test(location.pathname) ? new URL('../feedesk/', location.origin + location.pathname.replace(/[^/]*$/, '')).href : FD_ABS;
   let ICD = null;          // {meta, list, by, index} (Alberta Health ICD-9 list from Fee Desk, bundled)
   // v9 patient fields (encrypted with the entry). Never put name/MRN in URLs or console logs.
   const ptName = e => R.ptName(e);
