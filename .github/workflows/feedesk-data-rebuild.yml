@@ -1,6 +1,6 @@
 name: Rebuild Logs data from Fee Desk
 
-# Fee Desk's Monday data update sends a `feedesk-data-updated` repository_dispatch after it has published new data.
+# Fee Desk's Friday data update sends a `feedesk-data-updated` repository_dispatch after it has published new data.
 # repository_dispatch runs only from the default branch, so this does nothing until it is merged.
 # Steps: check out Logs + the Fee Desk commit -> regenerate the Logs data -> run tests -> bump the service-worker cache ->
 # open a PR with the result -> deploy the Cloudflare Pages build (main only).

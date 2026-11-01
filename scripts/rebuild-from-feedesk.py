@@ -3,7 +3,7 @@
 
     python3 scripts/rebuild-from-feedesk.py --feedesk ../feedesk [--date YYYYMMDD] [--result out.json] [--no-bump]
 
-Used by .github/workflows/feedesk-data-rebuild.yml (triggered by Fee Desk's Monday data update) and runnable by hand.
+Used by .github/workflows/feedesk-data-rebuild.yml (triggered by Fee Desk's Friday data update) and runnable by hand.
 Steps: (1) find Fee Desk's data folder (site/data, else public/data); (2) run build-codes.py, build-fees.py, build-icd9.py;
 (3) list the public/data files whose content changed; (4) if any changed: bump `const V` in public/sw.js (the `url-switch` token stays,
 tests/suite-parity.test.js needs it) and mirror public/ into site/ (the Pages workflow publishes site/; the two must stay identical).
