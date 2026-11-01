@@ -9,9 +9,9 @@
 // 'Not added'); I. 10 fee + 10 ICD-9 + 10 modifiers end to end through Fee Desk v37 at 1280 and 390 (screenshots → multipick10/).
 // Run: cd /workspace/pwtest && BASE=http://127.0.0.1:18792/ node /workspace/medbilling-logs/tests/multipick-v9l.test.js [shots]
 const path = require('path'), fs = require('fs');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium, NAME_POS, pickTypeIfScanMenu } = require('./helpers/cr-welcome');
 const BASE = (process.env.BASE || 'http://127.0.0.1:18792/').replace(/\/?$/, '/');
-const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'delara-medbilling/';
+const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'feedesk/';
 const OUT10 = process.env.OUT10 || '/workspace/artifacts/multipick10'; fs.mkdirSync(OUT10, { recursive: true });
 const OUT = process.env.OUT || '/workspace/artifacts/multipick', SHOTS = process.argv[2] === 'shots'; fs.mkdirSync(OUT, { recursive: true });
 const PIN = '48203917';
@@ -35,7 +35,7 @@ async function setup(browser, o, label) {
   await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(600);
   return { ctx, p };
 }
-async function tapOrClick(pg, sel, touch) { const l = pg.locator(sel).first(); await l.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' })); await pg.waitForTimeout(60); if (touch) await l.tap(); else await l.click(); }
+async function tapOrClick(pg, sel, touch, pos = {}) { const l = pg.locator(sel).first(); await l.evaluate(el => el.scrollIntoView({ block: "center", inline: "center" })); await pg.waitForTimeout(60); if (touch) await l.tap(); else await l.click(pos); }   // touch: cell centre (b11 phone fit: the row above's 44 px "+ same" button covers the left edge)
 async function openPick(p, sel, touch, cellSel) {
   await tapOrClick(p, cellSel, touch); await p.waitForTimeout(150);
   const [fd] = await Promise.all([p.context().waitForEvent('page'), p.locator(sel).first().evaluate(b => b.click())]);
@@ -54,11 +54,12 @@ async function sendTray(fd, touch) { const closed = fd.waitForEvent('close', { t
 
 async function suite(browser, o, label, touch) {
   const { ctx, p } = await setup(browser, o, label);
-  await tapOrClick(p, cell(1, 'name'), touch); await p.keyboard.type('Multi Pick'); await p.keyboard.press('Tab');
+  await tapOrClick(p, cell(1, 'name'), touch, NAME_POS); if (touch) await pickTypeIfScanMenu(p);   // b11: empty name on touch → Scan / Type menu
+  await p.keyboard.type('Multi Pick'); await p.keyboard.press('Tab');
   await p.waitForSelector(`${G} tbody tr:nth-child(1)[data-id]`); await p.waitForTimeout(500);
 
   // A. ＋ a fee code, an ICD-9 code and a modifier → one send fills Fee code(s), Dx and Modifier code 1
-  let fdUrl = ''; ctx.on('request', r => { if (r.isNavigationRequest() && r.url().includes('/delara-medbilling/?')) fdUrl = r.url(); });
+  let fdUrl = ''; ctx.on('request', r => { if (r.isNavigationRequest() && r.url().includes('/feedesk/?')) fdUrl = r.url(); });
   let fd = await openPick(p, pickBtn(1, 'fee'), touch, cell(1, 'fee'));
   ok(new URL(fdUrl || 'http://x/').searchParams.get('pv') === '2' && new URL(fdUrl || 'http://x/').searchParams.get('pmax') === '10', `${label}: ↗ asks Fee Desk for the multi-code return (pv=2, pmax=10)`);
   ok(/＋ to pick several/.test(await fd.textContent('#pickbar')), `${label}: Fee Desk shows the multi-code banner`);
@@ -125,11 +126,11 @@ async function suite(browser, o, label, touch) {
 
   if (label === '1280') {
     // F. locked vault on return (pop-up blocked → same tab) → waits for the unlock
-    await tapOrClick(p, cell(2, 'name'), touch); await p.keyboard.type('Locked Multi'); await p.keyboard.press('Tab');
+    await tapOrClick(p, cell(2, 'name'), touch, NAME_POS); if (touch) await pickTypeIfScanMenu(p); await p.keyboard.type('Locked Multi'); await p.keyboard.press('Tab');
     await p.waitForSelector(`${G} tbody tr:nth-child(2)[data-id]`); await p.waitForTimeout(400);
     await p.evaluate(() => { window.open = () => null; });
     await tapOrClick(p, cell(2, 'fee'), touch); await p.waitForTimeout(150);
-    await Promise.all([p.waitForURL(/delara-medbilling/), p.locator(pickBtn(2, 'fee')).evaluate(b => b.click())]);
+    await Promise.all([p.waitForURL(/feedesk/), p.locator(pickBtn(2, 'fee')).evaluate(b => b.click())]);
     await p.waitForSelector('#pickbar'); await fdSearch(p, '03.03A'); await p.click('#results .hit[data-code="03.03A"] .psel');
     await fdIcd(p, '650', '650'); await p.click('#icdresults .icdrow[data-icd="650"] .psel');
     await fdMod(p, 'CMGP'); await p.click('.modrow[data-mod="CMGP"] .psel');
@@ -152,7 +153,9 @@ async function suite(browser, o, label, touch) {
     const eleven = n => Array.from({ length: 11 }, (x, i) => n(i)).join(',');
     for (const bad of [`fee=${eleven(i => '03.0' + i + 'A')}`, `mod=CM GP`, `fee=<b>`, `dx=${eleven(i => 'V2' + Math.floor(i / 10) + '.' + (i % 10))}`, `mod=${eleven(i => 'M' + i)}`, ``]) {
       await p.goto(LOGS + `?pickv=2&ctx=${tok}&${bad}`); await p.waitForSelector('#unlockForm:not([hidden])');
-      ok(!/Unlock to add/.test(await p.textContent('#lockMsg')) && await p.evaluate(() => !!localStorage.getItem('bl.pick.v1')), `malformed v2 link rejected, pick still pending (${bad || 'no codes'})`);
+      // v9x (logs-billing): the pending pick lives in the encrypted device store, not plaintext localStorage; that it is still
+      // pending is proven below by the old single-code link working with the same token
+      ok(!/Unlock to add/.test(await p.textContent('#lockMsg')) && await p.evaluate(() => localStorage.getItem('bl.pick.v1') === null), `malformed v2 link rejected, nothing offered, no plaintext pick (${bad || 'no codes'})`);
     }
     await p.goto(LOGS + `?picked=13.99BA&kind=hsc&ctx=${tok}`); await p.waitForSelector('#unlockForm:not([hidden])');
     ok(/Unlock to add 13\.99BA/.test(await p.textContent('#lockMsg')), 'the old single-code link still works with the same token');
@@ -178,7 +181,7 @@ async function suite(browser, o, label, touch) {
   }
   // I. 10 fee codes + 10 ICD-9 + 10 modifiers through Fee Desk v37 in one send → all in the row (fee, Dx paired in order, Mod 1)
   const R10 = label === '1280' ? 3 : 2;
-  await tapOrClick(p, cell(R10, 'name'), touch); await p.keyboard.type('Ten Codes'); await p.keyboard.press('Tab');
+  await tapOrClick(p, cell(R10, 'name'), touch, NAME_POS); if (touch) await pickTypeIfScanMenu(p); await p.keyboard.type('Ten Codes'); await p.keyboard.press('Tab');
   await p.waitForSelector(`${G} tbody tr:nth-child(${R10})[data-id]`); await p.waitForTimeout(400);
   fd = await openPick(p, pickBtn(R10, 'fee'), touch, cell(R10, 'fee'));
   const add10 = async sel => { const ks = await fd.$$eval(sel, a => a.slice(0, 10).map(e => e.dataset.psel)); for (const k of ks) { const q = `[data-psel="${k}"].psel`; await fd.$eval(q, e => { e.scrollIntoView({ block: 'start' }); window.scrollBy(0, -150); }); if (touch) await fd.tap(q); else await fd.click(q); } return ks.map(k => k.slice(2)); };

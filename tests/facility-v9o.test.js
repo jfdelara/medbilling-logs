@@ -6,7 +6,7 @@
 // 1280 (popover) and 390 (bottom sheet), text size slider.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18792/medbilling-logs/ OUT=/workspace/artifacts/mbl-v9o node /workspace/medbilling-logs/tests/facility-v9o.test.js
 const path = require('path'), fs = require('fs'), { execFileSync } = require('child_process');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium } = require('./helpers/cr-welcome');
 const URL = process.env.URL || 'http://127.0.0.1:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9o';
 const DL = path.join(OUT, 'scratch', 'downloads'); fs.mkdirSync(DL, { recursive: true });
@@ -16,7 +16,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); 
 const errors = [];
 const G = '#todayList table.grid';
 const cell = (r, c) => `${G} tbody tr:nth-child(${r}) .gc[data-c="${c}"]`;
-const ORDER = ['rn', 'name', 'mrn', 'hc', 'tin', 'tout', 'min', 'u', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'note', 'act'];
+const ORDER = ['rn', 'name', 'sex', 'mrn', 'hc', 'tin', 'tout', 'min', 'u', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'note', 'clm', 'act'];   // v9x: + Claim (Approve/Submit)
 const FC5 = ['Select Favourite…', 'Edit/Search…', 'CLNC - Clinic', 'D/N - Day/Night Care', 'EMRG - Emergency', 'MED - Medical', 'SURG - Surgical'];
 const NAMES = ['Ana Li', 'Robert Thompson-Whitaker', 'Chen Wei', "Sarah O'Neill"];
 const UAH = 'University Of Alberta Hospital';
@@ -31,7 +31,7 @@ async function setup(browser, o, label, seed, pin) {
   p.on('console', m => { if (m.type() === 'error') errors.push(label + ': ' + m.text()); }); p.on('pageerror', e => errors.push(label + ': ' + e.message));
   await p.goto(URL); await p.waitForSelector('#setupForm:not([hidden])');
   await p.check('input[name=sKind][value=pin]'); await p.fill('#sPass', pin || PIN); await p.fill('#sPass2', pin || PIN); await p.check('#sAck'); await p.check('#sResp'); await p.click('#sBtn');
-  await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(300);
+  await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(300); await p.evaluate(() => { const c = document.querySelector('#refCol'); if (c && c.checked) c.click(); }); await p.waitForTimeout(400);   // v9s: this suite checks the layout with Referring provider turned off (entry-window-v9r covers it on)
   if (seed) await p.evaluate(async names => {   // v9n-format entries: no facNo / facNm / fcen fields at all
     const now = Date.now();
     for (let i = 0; i < names.length; i++) { const s = now - (names.length - i) * 30 * 60000;
@@ -77,7 +77,7 @@ async function desktop(browser) {
   const h = await heads(p);
   ok(JSON.stringify(h.map(x => x[0])) === JSON.stringify(ORDER), `${L}: column order ${h.map(x => x[1] || x[0]).join(' · ')}`);
   ok(h.find(x => x[0] === 'fno')[1] === 'Facility #' && h.find(x => x[0] === 'fcen')[1] === 'Functional centre', `${L}: headers "Facility #" / "Functional centre"`);
-  ok(await p.evaluate(() => document.querySelectorAll('#todayList table.grid tfoot td.tdet[colspan="7"]').length === 1 && [...document.querySelector('#todayList table.grid tfoot tr').cells].reduce((a, c) => a + (+c.colSpan || 1), 0) === document.querySelectorAll('#todayList table.grid colgroup col').length), `${L}: totals row still spans every column`);
+  ok(await p.evaluate(() => document.querySelectorAll('#todayList table.grid tfoot td.tdet[colspan="8"]').length === 1 && [...document.querySelector('#todayList table.grid tfoot tr').cells].reduce((a, c) => a + (+c.colSpan || 1), 0) === document.querySelectorAll('#todayList table.grid colgroup col').length), `${L}: totals row still spans every column`);
   const old = await p.evaluate(() => [...document.querySelectorAll('#todayList tbody tr[data-id]')].map(tr => [tr.querySelector('.gc[data-c="fno"]').dataset.v, tr.querySelector('.gc[data-c="fcen"]').dataset.v, tr.querySelector('.gc[data-c="fee"]').value, tr.querySelector('.gc[data-c="mod1"]').value]));
   ok(old.length === 4 && old.every(r => r[0] === '' && r[1] === '' && r[2] === '03.03A') && old[1][3] === 'CMGP', `${L}: 4 older entries (no new fields) load with blank Facility # / Functional centre, codes intact`);
   const t0 = await totals(p), d0 = await totDet(p);
@@ -283,7 +283,11 @@ async function phone(browser) {
   await setSize(p, 6); const gL = await geo(p), v3 = await codeVis(p, 2, 'fcen');
   ok(gL.w.fno >= g.w.fno && gL.w.fcen >= g.w.fcen && (gL.w.fno > g.w.fno || gL.w.fno >= 390 * 0.4) && v3 && v3.full, `${L}: at ${gL.fs} the columns grow (or stay at the phone cap) (Facility # ${g.w.fno} → ${gL.w.fno}px) and the code still shows (${v3 && v3.code})`);
   await showCols(p); await p.locator(cell(3, 'fcen')).tap(); await fpkOpen(p); const fs2 = await p.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#fpkList .pk')).fontSize));
-  ok(fs2 >= 21, `${L}: sheet text follows the text size (${fs2}px)`);
+  // b11 phone fit (the owner 2026-10-19, app.js:36): grid text = round(20 × 0.85) = 17 px on phones; the sheet is grid + 2 px
+  // (public/css/app.css:757 .fpkbox max(15px, --g-fs + 2px)) → exactly 19 px (v9o expected ≥ 21 = 19 + 2 before phone fit). QA S2: tightened to ===
+  const gfs2 = await p.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--g-fs')));
+  ok(fs2 === Math.max(15, gfs2 + 2) && gfs2 === 17, `${L}: sheet = grid + 2 px (${fs2} = ${gfs2} + 2)`);
+  ok(fs2 >= 19, `${L}: sheet text follows the text size (${fs2}px; b11 phone fit: grid 17 px + 2)`);
   await p.locator('#fpkCancel').tap(); await fpkShut(p); await setSize(p, 2);
   await p.context().close();
 }

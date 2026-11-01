@@ -5,9 +5,9 @@
 // duplicate, Cancel, a locked vault on return (same-tab return), invalid return URLs rejected, 390 touch + 1280, NS held.
 // Run: cd /workspace/pwtest && BASE=http://127.0.0.1:18792/ node /workspace/medbilling-logs/tests/pick-return-v9g.test.js
 const path = require('path');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium, NAME_POS, pickTypeIfScanMenu } = require('./helpers/cr-welcome');
 const BASE = (process.env.BASE || 'http://127.0.0.1:18792/').replace(/\/?$/, '/');
-const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'delara-medbilling/';
+const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'feedesk/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-pick-return';
 // v9l / Fee Desk v36: Logs now asks for the multi-code return (pv=2), so Alberta pick mode shows the multi-code banner
 // (with a Modifiers button); a plain tap still sends one code, which is what this suite checks. See multipick-v9l.test.js.
@@ -26,14 +26,14 @@ function watch(p, label) {
 async function setup(browser, o, label) {
   const ctx = await browser.newContext(Object.assign({ timezoneId: 'America/Edmonton' }, o));
   ctx.on('page', pg => watch(pg, label + ' fd'));
-  ctx.on('request', r => { if (r.isNavigationRequest() && r.url().includes('/delara-medbilling/')) fdUrls.push(r.url()); });
+  ctx.on('request', r => { if (r.isNavigationRequest() && r.url().includes('/feedesk/')) fdUrls.push(r.url()); });
   const p = await ctx.newPage(); watch(p, label);
   await p.goto(LOGS); await p.waitForSelector('#setupForm:not([hidden])');
   await p.check('input[name=sKind][value=pin]'); await p.fill('#sPass', PIN); await p.fill('#sPass2', PIN); await p.check('#sAck'); await p.check('#sResp'); await p.click('#sBtn');
   await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(600);
   return { ctx, p };
 }
-async function tapOrClick(pg, sel, touch) { const l = pg.locator(sel).first(); await l.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' })); await pg.waitForTimeout(60); if (touch) await l.tap(); else await l.click(); }
+async function tapOrClick(pg, sel, touch, pos = {}) { const l = pg.locator(sel).first(); await l.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' })); await pg.waitForTimeout(60); if (touch) await l.tap(); else await l.click(pos); }   // touch: cell centre (b11 phone fit: the row above's 44 px "+ same" button covers the left edge)
 // select the cell, then ↗ (the button shows on the active row), and catch the Fee Desk window
 async function openPick(p, sel, touch, cellSel) {
   await tapOrClick(p, cellSel, touch); await p.waitForTimeout(150);
@@ -51,7 +51,8 @@ async function fdSearch(fd, q) { await fdReady(fd); await fd.fill('#q', q); awai
 async function suite(browser, o, label, touch) {
   const { ctx, p } = await setup(browser, o, label);
   // a row with a patient (the code goes into this row)
-  await tapOrClick(p, cell(1, 'name'), touch); await p.keyboard.type('Pick Test'); await p.keyboard.press('Tab');
+  await tapOrClick(p, cell(1, 'name'), touch, NAME_POS); if (touch) await pickTypeIfScanMenu(p);   // b11: empty name on touch → Scan / Type menu
+  await p.keyboard.type('Pick Test'); await p.keyboard.press('Tab');
   await p.waitForSelector(`${G} tbody tr:nth-child(1)[data-id]`); await p.waitForTimeout(500);
 
   // 1. fee code from a search result
@@ -153,11 +154,11 @@ async function suite(browser, o, label, touch) {
   await plain.close();
 
   // 9. locked vault on return (pop-up blocked → same tab → the code waits for the unlock)
-  await tapOrClick(p, cell(2, 'name'), touch); await p.keyboard.type('Locked Return'); await p.keyboard.press('Tab');
+  await tapOrClick(p, cell(2, 'name'), touch, NAME_POS); if (touch) await pickTypeIfScanMenu(p); await p.keyboard.type('Locked Return'); await p.keyboard.press('Tab');
   await p.waitForSelector(`${G} tbody tr:nth-child(2)[data-id]`); await p.waitForTimeout(400);
   await p.evaluate(() => { window.open = () => null; });
   await tapOrClick(p, cell(2, 'fee'), touch); await p.waitForTimeout(150);
-  await Promise.all([p.waitForURL(/delara-medbilling/), p.locator(pickBtn(2, 'fee')).evaluate(b => b.click())]);
+  await Promise.all([p.waitForURL(/feedesk/), p.locator(pickBtn(2, 'fee')).evaluate(b => b.click())]);
   await p.waitForSelector('#pickbar');
   await fdSearch(p, '03.05JR');
   await Promise.all([p.waitForURL(/medbilling-logs/), tapOrClick(p, '#results .hit[data-code="03.05JR"]', touch)]);

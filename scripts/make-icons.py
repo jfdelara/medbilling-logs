@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""App icons for Med Billing Logs, drawn in the same style and palette as MedBilling Fee Desk
+"""App icons for MedBilling Logs, drawn in the same style and palette as MedBilling Fee Desk
 (scripts/make-assets.py there): teal square, light rounded panel, white log book with teal spine, gold/orange accent."""
 import os
 from PIL import Image, ImageDraw

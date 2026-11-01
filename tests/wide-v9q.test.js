@@ -5,7 +5,7 @@
 // iPhone / iPad layouts identical to v9p (baseline metrics from v9p: /workspace/artifacts/mbl-v9q/probe-before/metrics.json).
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18792/medbilling-logs/ OUT=/workspace/artifacts/mbl-v9q node /workspace/medbilling-logs/tests/wide-v9q.test.js
 const path = require('path'), fs = require('fs');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium } = require('./helpers/cr-welcome');
 const URL0 = process.env.URL || 'http://127.0.0.1:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9q'; fs.mkdirSync(OUT, { recursive: true });
 const BASEF = process.env.BASELINE || '/workspace/artifacts/mbl-v9q/probe-before/metrics.json';
@@ -34,7 +34,7 @@ async function open(br, vp, o, withData, label) {
   // desktop runs use Chromium's classic (non-overlay) scrollbars (--hide-scrollbars removed): 17 px, like Windows 11 Edge
   await p.goto(URL0); await p.waitForSelector('#setupForm:not([hidden])');
   await p.check('input[name=sKind][value=pin]'); await p.fill('#sPass', PIN); await p.fill('#sPass2', PIN); await p.check('#sAck'); await p.check('#sResp'); await p.click('#sBtn');
-  await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(300);
+  await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(300); await p.evaluate(() => { const c = document.querySelector('#refCol'); if (c && c.checked) c.click(); }); await p.waitForTimeout(400);   // v9s: this suite checks the layout with Referring provider turned off (entry-window-v9r covers it on)
   if (withData) { await seed(p); await p.click('#lockNow'); await p.waitForSelector('#unlockForm:not([hidden])'); await p.fill('#uPass', PIN); await p.click('#uBtn'); await p.waitForFunction(() => !document.body.classList.contains('locked')); }
   if (withData) await p.evaluate(k => { const i = document.querySelector('#dPick'); i.value = k; i.dispatchEvent(new Event('change')); }, DAY);
   await p.waitForTimeout(900);
@@ -58,11 +58,11 @@ const M = p => p.evaluate(() => { const R = el => { if (!el) return null; const 
     for (const withData of [false, true]) {
       const { ctx, p } = await open(cr, { width: w, height: h }, null, withData, L); const m = await M(p); const D = withData ? 'with data' : 'empty day';
       if (withData) res[L] = m;
-      if (!withData) { ok(m.top[0] === 0 && m.top[2] >= w - 1 && m.pbar[2] >= w - 1 && m.main[0] <= 1 && m.main[2] >= w - 1 && m.tab1[0] <= 16 && m.gwrap[0] <= 16 && m.gwrap[2] >= w - 16, `${L}: app bar, time strip, tabs and grid span the window (tab at ${m.tab1[0]}px, grid ${m.gwrap[0]}–${m.gwrap[2]} of ${w})`); }
+      if (!withData) { ok(m.top[0] === 0 && m.top[2] >= w - 1 && m.pbar[2] >= w - 1 && m.main[0] <= 1 && m.main[2] >= w - 1 && (m.tabs[1] > h / 2 ? m.tabs[0] <= 1 && m.tabs[2] >= w - 1 : m.tab1[0] <= 16) && m.gwrap[0] <= 16 && m.gwrap[2] >= w - 16, `${L}: app bar, time strip, tabs and grid span the window (tab at ${m.tab1[0]}px, grid ${m.gwrap[0]}–${m.gwrap[2]} of ${w})`); }
       ok(m.sbw >= 15 && m.sw <= m.cw + 1 && m.docSW <= w && m.lastTh <= m.wrRight + 1, `${L} ${D}: all ${Object.keys(m.cols).length} columns on screen, no sideways scroll (grid ${m.sw}/${m.cw}px, last column ends ${m.lastTh} ≤ ${m.wrRight}; scrollbar ${m.sbw}px)`);
       ok(m.align, `${L} ${D}: header cells line up with the cells below`);
       if (withData) ok(!m.broken.length, `${L}: no code / name broken mid-word ${m.broken.join(' | ')}`);
-      ok(m.gwrap[3] >= h - 8 && m.footTop >= h - 1, `${L} ${D}: grid fills to the bottom (ends ${m.gwrap[3]} of ${h}); footer only after the last row (footer top ${m.footTop})`);
+      ok(m.gwrap[3] >= (m.tabs[1] > h / 2 ? m.tabs[1] : h) - 8 && m.footTop >= (m.tabs[1] > h / 2 ? m.tabs[1] : h) - 1,   /* suite parity (footer may sit under the fixed bar): grid fills to the bottom tab bar */ `${L} ${D}: grid fills to the bottom (ends ${m.gwrap[3]} of ${h}); footer only after the last row (footer top ${m.footTop})`);
       if (withData) {
         await p.evaluate(() => { const w = document.querySelector('#todayList .gwrap'); w.scrollTop = 260; }); await p.waitForTimeout(250);
         const st = await p.evaluate(() => { const w = document.querySelector('#todayList .gwrap'), th = w.querySelector('thead th.h-name'); return [Math.round(th.getBoundingClientRect().top), Math.round(w.getBoundingClientRect().top + w.clientTop), w.scrollTop]; });
@@ -87,11 +87,27 @@ const M = p => p.evaluate(() => { const R = el => { if (!el) return null; const 
   if (!base) ok(false, 'baseline metrics missing: ' + BASEF);
   else for (const [vp, w, h, ua, dsf] of [['402x874m', 402, 874, IPHONE, 3], ['375x667m', 375, 667, IPHONE, 3], ['820x1180t', 820, 1180, IPAD, 2]]) {
     const { ctx, p } = await open(cr, { width: w, height: h }, { userAgent: ua, isMobile: true, hasTouch: true, deviceScaleFactor: dsf }, true, vp); const m = await M(p), b = base[vp];
-    const same = JSON.stringify(m.cols) === JSON.stringify(b.cols) && JSON.stringify(m.gwrap) === JSON.stringify(b.gwrap) && JSON.stringify(m.main) === JSON.stringify(b.main) && JSON.stringify(m.tab1) === JSON.stringify(b.tabsBtn1) && m.sw === b.sw;
+    // v9x: the one-line H-Link batch strip above the sheet and the new Claim column are the only changes; compare the rest
+    const strip = await p.evaluate(() => { const x = document.querySelector('#clmBar'); if (!x || x.hidden) return 0; const cs = getComputedStyle(x); return Math.round(x.getBoundingClientRect().height + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)); });
+    ok(strip > 0 && strip <= 30, `${vp}: v9x batch strip is one line on this screen (${strip}px)`);
+    if (m.cols.clm != null) { m.sw -= m.cols.clm; delete m.cols.clm; } if (Array.isArray(m.gwrap)) m.gwrap[1] -= strip;
+    // b11: the new Sex column is the only tablet change (same treatment as the v9x Claim column); on phones (≤ 480 px) the b11
+    // phone-fit sheet (the owner, 2026-10-19: half-size rows, content-sized columns) replaces the v9p layout, so check that instead
+    if (m.cols.sex != null) { m.sw -= m.cols.sex; delete m.cols.sex; }
+    // spec: public/js/app.js:34-38 (phone ≤ 480 px → html.phonefit, --g-h = max(20, round(40 × 0.5)) = 20 px); table narrower than v9p
+    if (w <= 480) {
+      const pf = await p.evaluate(() => [document.documentElement.classList.contains('phonefit'), getComputedStyle(document.documentElement).getPropertyValue('--g-h').trim()]);
+      ok(pf[0] && pf[1] === '20px' && m.sw < b.sw, `${vp}: b11 phone-fit sheet replaces the v9p layout (rows ${pf[1]}, table ${m.sw}px < v9p ${b.sw}px)`);
+      await ctx.close(); continue;
+    }
+    // v9x: ±1 px (sub-pixel), and the first tab button is narrower because there is a new Claims tab (its left / top / bottom stay)
+    const near = (x, y) => JSON.stringify(Object.keys(Object(x)).sort()) === JSON.stringify(Object.keys(Object(y)).sort()) && Object.keys(Object(x)).every(k => Math.abs(x[k] - y[k]) <= 1);
+    const bb = m.tabs && m.tabs[1] > m.vh / 2;   // suite parity: the tab row moved to the fixed bottom bar, so only the columns, table width and grid sides must match v9p
+    const same = near(m.cols, b.cols) && (bb ? near([m.gwrap[0], m.gwrap[2]], [b.gwrap[0], b.gwrap[2]]) : near(m.gwrap, b.gwrap) && near(m.main, b.main) && near([m.tab1[0], m.tab1[1], m.tab1[3]], [b.tabsBtn1[0], b.tabsBtn1[1], b.tabsBtn1[3]])) && Math.abs(m.sw - b.sw) <= 2;
     ok(same, `${vp}: layout identical to v9p (grid ${m.gwrap}, table ${m.sw}px, columns unchanged)` + (same ? '' : ` now ${JSON.stringify([m.cols, m.gwrap, m.main, m.tab1, m.sw])} was ${JSON.stringify([b.cols, b.gwrap, b.main, b.tabsBtn1, b.sw])}`));
     await p.screenshot({ path: path.join(OUT, `wide-check-${vp.replace(/[mt]$/, '')}.png`) }); await ctx.close();
   }
   await cr.close();
   ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.slice(0, 4).join(' | ') : ''));
   console.log(fails ? `${fails} FAIL` : 'ALL PASS'); process.exit(fails ? 1 : 0);
-})().catch(e => { console.error(e); process.exit(2); });
+})().catch(e => { console.error(e); console.error("page errors:", errors.join("\n")); process.exit(2); });

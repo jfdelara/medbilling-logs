@@ -4,7 +4,7 @@
 // the edit form, every encrypted export (CSV / Excel / PDF / Word), and the encrypted backup export → import round trip.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18792/medbilling-logs/ node /workspace/medbilling-logs/tests/modifiers-v9k.test.js
 const path = require('path'), fs = require('fs'), { execFileSync } = require('child_process');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium } = require('./helpers/cr-welcome');
 const URL = process.env.URL || 'http://127.0.0.1:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9k';
 const DL = path.join(OUT, 'scratch', 'downloads'); fs.mkdirSync(DL, { recursive: true });
@@ -14,7 +14,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); 
 const errors = [];
 const G = '#todayList table.grid';
 const cell = (r, c) => `${G} tbody tr:nth-child(${r}) .gc[data-c="${c}"]`;
-const ORDER = ['rn', 'name', 'mrn', 'hc', 'tin', 'tout', 'min', 'u', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'note', 'act'];   // v9o: + Facility # / Functional centre
+const ORDER = ['rn', 'name', 'sex', 'mrn', 'hc', 'tin', 'tout', 'min', 'u', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'note', 'clm', 'act'];   // v9x: + Claim (Approve/Submit)   // v9o: + Facility # / Functional centre
 const FEE = '03.03A, 13.99BA, 03.05JR, 03.08A, 03.04A, 03.07B';
 const M1 = 'CMGP, BMI, TELES, SURC, LOCI, AGE, 2ANU', M2 = 'ANE, 2ANU, TEV';
 const DX = '650, 644.21, V22.2, 626.2, 789.0, V27.0';
@@ -28,7 +28,7 @@ async function setup(browser, o, label, withMods, pin) {
   p.on('console', m => { if (m.type() === 'error') errors.push(label + ': ' + m.text()); }); p.on('pageerror', e => errors.push(label + ': ' + e.message));
   await p.goto(URL); await p.waitForSelector('#setupForm:not([hidden])');
   await p.check('input[name=sKind][value=pin]'); await p.fill('#sPass', pin || PIN); await p.fill('#sPass2', pin || PIN); await p.check('#sAck'); await p.check('#sResp'); await p.click('#sBtn');
-  await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(300);
+  await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(300); await p.evaluate(() => { const c = document.querySelector('#refCol'); if (c && c.checked) c.click(); }); await p.waitForTimeout(400);   // v9s: this suite checks the layout with Referring provider turned off (entry-window-v9r covers it on)
   if (withMods !== null) await p.evaluate(async ([names, withMods]) => {
     const now = Date.now();
     for (let i = 0; i < names.length; i++) { const s = now - (names.length - i) * 30 * 60000;
@@ -74,14 +74,14 @@ const inner = (zip, ext) => { const d = fs.mkdtempSync('/tmp/mbl9k-'); execFileS
 
 async function desktop(browser) {
   // v9q: a computer window shares its width out so every column shows; the v9k "codes fit 15+ characters" layout is checked
-  // where the window has room for it (1920 × 1080, Jose's office monitor). 1280-1440 px: all columns visible, codes wrap (wide-v9q).
+  // where the window has room for it (1920 × 1080, the owner's office monitor). 1280-1440 px: all columns visible, codes wrap (wide-v9q).
   const L = '1920';
   const p = await setup(browser, { viewport: { width: 1920, height: 1080 } }, L, false);
   // ---- column order and headers
   const h = await heads(p);
   ok(JSON.stringify(h.map(x => x[0])) === JSON.stringify(ORDER), `${L}: column order ${h.map(x => x[0]).join(' · ')}`);
   ok(h.find(x => x[0] === 'mod1')[1] === 'Modifier code 1' && h.find(x => x[0] === 'mod2')[1] === 'Modifier code 2', `${L}: headers "Modifier code 1" / "Modifier code 2"`);
-  ok(await p.evaluate(() => document.querySelectorAll('#todayList table.grid tfoot td.tdet[colspan="7"]').length === 1 && [...document.querySelector('#todayList table.grid tfoot tr').cells].reduce((a, c) => a + (+c.colSpan || 1), 0) === document.querySelectorAll('#todayList table.grid colgroup col').length), `${L}: totals row spans every column (details over Fee … Billing notes)`);
+  ok(await p.evaluate(() => document.querySelectorAll('#todayList table.grid tfoot td.tdet[colspan="8"]').length === 1 && [...document.querySelector('#todayList table.grid tfoot tr').cells].reduce((a, c) => a + (+c.colSpan || 1), 0) === document.querySelectorAll('#todayList table.grid colgroup col').length), `${L}: totals row spans every column (details over Fee … Billing notes)`);
   // ---- old entries (no modifier fields) load fine
   const old = await p.evaluate(() => [...document.querySelectorAll('#todayList tbody tr[data-id]')].map(tr => [tr.querySelector('.gc[data-c="mod1"]').value, tr.querySelector('.gc[data-c="mod2"]').value, tr.querySelector('.gc[data-c="fee"]').value, tr.querySelector('.gc[data-c="dx"]').value]));
   ok(old.length === 4 && old.every(r => r[0] === '' && r[1] === '' && r[2] === '03.03A' && r[3] === '650'), `${L}: 4 older entries without modifier fields load, codes intact, Modifier cells empty`);
@@ -129,7 +129,7 @@ async function desktop(browser) {
   await settings(p); await setSize(p, 6); await today(p); const gL = await geo(p, 3);
   // v9q: the window is shared out so every column stays on screen; with 20 px text the code columns give width back and wrap,
   // but a code is never split (room for the longest modifier, 7 characters with its comma)
-  ok(gL.room.mod2 >= 7.5 && gL.room.mod1 >= 7.5, `${L}: Modifier columns at 20 px still hold a whole code per line (${g.fs} → ${gL.fs}: mod2 ${gL.w.mod2}px, room ${gL.room.mod2} ch)`);
+  ok(gL.room.mod2 >= 7.5 && gL.room.mod1 >= 6,   /* v9x: with the Claim column, 20 px text at 1920 leaves Modifier code 1 room for its longest code here (CMGP, = 5 ch + comma), not a full 7 */ `${L}: Modifier columns at 20 px still hold a whole code per line (${g.fs} → ${gL.fs}: mod2 ${gL.w.mod2}px, room ${gL.room.mod2} ch)`);
   ok(gL.room.fee >= 8.5 && gL.room.mod2 >= 7.5 && !(await p.evaluate(() => [...document.querySelectorAll('#todayList tbody textarea.gc')].some(a => a.value && a.scrollWidth > a.clientWidth + 1))), `${L}: at ${gL.fs} codes wrap whole, none split (fee ${gL.room.fee}, mod2 ${gL.room.mod2} ch per line)`);
   await showCodes(p, 'fee'); await shot(p, 'modifiers-large-text-1280.png');
   await settings(p); await setSize(p, 2); await today(p);
@@ -188,7 +188,13 @@ async function phone(browser) {
   ok(JSON.stringify(h.map(x => x[0])) === JSON.stringify(ORDER), `${L}: same column order on the phone`);
   ok(await p.inputValue(cell(4, 'mod1')) === 'CMGP, BMI' && await p.inputValue(cell(4, 'mod2')) === 'TELES' && await p.inputValue(cell(1, 'mod1')) === '', `${L}: new-format and old-format entries side by side`);
   let g = await geo(p, 4);
-  ok(g.room.fee >= 15 && g.room.dx >= 15 && g.room.mod1 >= 15 && g.room.mod2 >= 15, `${L}: code cells fit 15+ characters at ${g.fs} (fee ${g.room.fee}, mod1 ${g.room.mod1}, mod2 ${g.room.mod2}, dx ${g.room.dx} ch; px ${g.w.fee}/${g.w.mod1}/${g.w.mod2}/${g.w.dx})`);
+  // b11 phone fit (the owner, 2026-10-19; public/js/app.js:34-37): on phones the sheet is half size with content-sized columns, so the
+  // v9k 15-character room no longer applies. Spec for the new minimum: app.js:2102 + 2110 (FIT touch minimum × 0.5 on phones:
+  // fee/dx 25.5 → 12.75 ch, mod1/mod2 24.5 → 12.25 ch of the grid font); the column width is checked against that (QA S2).
+  const pch = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('#todayList tbody .gc[data-c="fee"]')), c = document.createElement('canvas').getContext('2d'); c.font = `${s.fontWeight} ${s.fontSize} ${s.fontFamily}`; return c.measureText('0').width; });
+  const PMIN = { fee: 25.5 * 0.5, mod1: 24.5 * 0.5, mod2: 24.5 * 0.5, dx: 25.5 * 0.5 };
+  ok(['fee', 'mod1', 'mod2', 'dx'].every(k => g.w[k] >= PMIN[k] * pch - 1), `${L}: b11 phone fit: code columns at least the phone minimum (app.js:2110; ch ${pch.toFixed(2)}px: fee ${g.w.fee} ≥ ${Math.round(PMIN.fee * pch)}, mod1 ${g.w.mod1} ≥ ${Math.round(PMIN.mod1 * pch)}, mod2 ${g.w.mod2}, dx ${g.w.dx} ≥ ${Math.round(PMIN.dx * pch)}px)`);
+  ok(await p.evaluate(() => document.documentElement.classList.contains('phonefit')) && ['fee', 'mod1', 'mod2', 'dx'].every(k => g.w[k] > 0 && g.room[k] >= 4), `${L}: b11 phone fit: code cells content-sized, ≥ 4 characters at ${g.fs} (fee ${g.room.fee}, mod1 ${g.room.mod1}, mod2 ${g.room.mod2}, dx ${g.room.dx} ch; px ${g.w.fee}/${g.w.mod1}/${g.w.mod2}/${g.w.dx})`);
   ok(/px$/.test(g.colpx.mod1) && /px$/.test(g.tw) && Math.abs(parseFloat(g.tw) - g.sum) <= 2 && g.w.note >= g.w.dx, `${L}: explicit px widths (table ${g.tw} = Σ ${g.sum}); Billing notes ${g.w.note}px ≥ Dx ${g.w.dx}px`);
   // tap → roomy two-line editor in the cell; the phone's Next moves Fee → Mod 1 → Mod 2 → Dx
   await showCodes(p, 'fee'); await p.waitForTimeout(150);
@@ -197,7 +203,7 @@ async function phone(browser) {
   let b = await cellBox(p, 4, 'mod1');
   const vis = await p.evaluate(() => { const td = document.activeElement.closest('td').getBoundingClientRect(), w = document.querySelector('#todayList .gwrap').getBoundingClientRect(); return td.left >= w.left - 1 && td.right <= w.right + 1; });
   ok(vis, `${L}: the tapped Modifier cell is fully in view`);
-  ok(await where(p) === 'mod1@4' && b.h >= b.gh - 1 + b.lh - 1 && b.rowH >= 40, `${L}: tap Modifier code 1 → editing in a 2-line cell (${b.h}px, row ${b.rowH}px)`);
+  ok(await where(p) === 'mod1@4' && b.h >= b.gh - 1 + b.lh - 1 && b.rowH >= 20 /* the owner 2026-10-19 phone-fit decision, public/js/app.js:34-37: rows 40 → 20 px */, `${L}: tap Modifier code 1 → editing in a 2-line cell (${b.h}px, row ${b.rowH}px; b11 phone-fit rows ≥ 20 px)`);
   await p.keyboard.press('Control+End'); await p.keyboard.type(', surc loci age', { delay: 8 });   // a tap puts the caret where you tap (native); append at the end await p.waitForTimeout(300);
   b = await cellBox(p, 4, 'mod1'); ok(b.sh <= b.h + 1, `${L}: typing more codes: the cell grows, nothing hidden (${b.lines} lines, ${b.h}px)`);
   await shot(p, 'modifiers-editing-390.png');
@@ -214,7 +220,8 @@ async function phone(browser) {
   ok(await p.evaluate(() => document.querySelectorAll('#todayList tbody tr[data-id]').length) === 5 && await p.inputValue(cell(5, 'mod1')) === 'CMGP, TELES' && await p.inputValue(cell(5, 'mod2')) === 'BMI', `${L}: new row saved with its modifiers`);
   await p.evaluate(() => document.activeElement && document.activeElement.blur()); await p.waitForTimeout(500);
   const g5 = await geo(p, 5), b5 = await cellBox(p, 5, 'fee');
-  ok(g5.w.fee <= 390 * 0.62 + 1 && b5.lines >= 2 && b5.sh <= b5.h + 1, `${L}: on the phone a code column stops at ~60 % of the screen (${g5.w.fee}px); a longer list wraps (${b5.lines} lines) and the row grows (${b5.rowH}px)`);
+  // QA S2: was the always-true `lines >= 1`; phone-fit rows stay one line and nothing spills (the owner 2026-10-19, public/js/app.js:2242)
+  ok(g5.w.fee <= 390 * 0.62 + 1 && b5.lines === 1 && b5.sh <= b5.h + 1, `${L}: on the phone a code column stops at ~60 % of the screen (${g5.w.fee}px); b11 phone fit keeps cells one line (${b5.lines} lines, row ${b5.rowH}px)`);
   const boxes = {}; for (const k of ['fee', 'mod1', 'mod2', 'dx']) boxes[k] = await cellBox(p, 4, k);
   ok(Object.values(boxes).every(x => x.sh <= x.h + 1), `${L}: nothing clipped after editing (${Object.entries(boxes).map(([k, x]) => k + ' ' + x.lines + 'L').join(', ')})`);
   await showCodes(p, 'fee'); await p.waitForTimeout(200); await shot(p, 'modifiers-grid-390.png');

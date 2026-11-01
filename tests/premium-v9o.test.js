@@ -2,7 +2,7 @@
 // Alberta statutory holidays (SOMB GR 1.2) and GR 1.3 designated days for 2026–2027.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18792/medbilling-logs/ OUT=/workspace/artifacts/mbl-v9o node /workspace/medbilling-logs/tests/premium-v9o.test.js
 const path = require('path'), fs = require('fs');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium } = require('./helpers/cr-welcome');
 const URL = process.env.URL || 'http://127.0.0.1:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9o'; fs.mkdirSync(path.join(OUT, 'scratch'), { recursive: true });
 const PIN = '48203917';
@@ -11,7 +11,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); 
 const errors = [];
 const G = '#todayList table.grid';
 const cell = (r, c) => `${G} tbody tr:nth-child(${r}) .gc[data-c="${c}"]`;
-const T = s => Date.parse(s.length === 16 ? s + ':00-06:00' : s);   // Edmonton MDT wall time (Oct 2026 / Oct 2025 are MDT)
+const T = s => Date.parse(s.length === 16 ? s + ':00-06:00' : s);   // Edmonton UTC-6 wall time (MDT until Nov 1, 2026, then permanent Alberta Time)
 const where = p => p.evaluate(() => { const a = document.activeElement, tr = a && a.closest && a.closest('tr'); return a && a.dataset && a.dataset.c ? `${a.dataset.c}@${tr ? tr.sectionRowIndex + 1 : '?'}` : (a ? a.id || a.tagName : ''); });
 const settle = p => p.waitForTimeout(700);
 async function unlock(p) { await p.waitForSelector('#unlockForm:not([hidden])'); await p.fill('#uPass', PIN); await p.click('#uBtn'); await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(500); }
@@ -27,7 +27,7 @@ async function setup(browser, o, label, seed, fixed) {
   return p;
 }
 const goDay = async (p, k) => { await p.click('#tabs [data-tab="today"]'); await p.evaluate(k => { const i = document.querySelector('#dPick'); i.value = k; i.dispatchEvent(new Event('change')); }, k); await p.waitForTimeout(500); };
-const strip = p => p.evaluate(() => { const b = document.querySelector('#premStrip'); return b.hidden ? null : { txt: b.innerText.replace(/\s+/g, ' ').trim(), cls: Object.fromEntries([...b.querySelectorAll('.pi')].map(x => [x.dataset.pc, x.className.replace('pi', '').trim()])), h: Math.round(b.getBoundingClientRect().height) }; });
+const strip = p => p.evaluate(() => { const b = document.querySelector('#premStrip'); return b.hidden ? null : { txt: b.innerText.replace(/\s+/g, ' ').trim(), cls: Object.fromEntries([...b.querySelectorAll('.pi')].map(x => [x.dataset.pc, [...x.classList].filter(k => !['pi', 'spchip', 'sm'].includes(k)).join(' ')])), h: Math.round(b.getBoundingClientRect().height) }; });
 const popOpen = p => p.evaluate(() => document.querySelector('#premDlg').open);
 const popTxt = p => p.evaluate(() => document.querySelector('#premT').textContent + ' | ' + document.querySelector('#premList').innerText.replace(/\s+/g, ' ').trim());
 const popClose = async p => { await p.click('#premOk'); await p.waitForFunction(() => !document.querySelector('#premDlg').open); };
@@ -39,7 +39,7 @@ async function unit(browser) {
     return { h26: R.holidaysOf(2026).map(h => h.date + ' ' + h.name), h27: R.holidaysOf(2027).map(h => h.date + ' ' + h.name),
       kinds: ['2026-10-12', '2026-12-26', '2026-12-28', '2026-09-30', '2026-04-06', '2027-12-27', '2027-12-28', '2026-10-07', '2027-03-26'].map(k => k + ':' + (R.holidayKind(k) || '-')),
       max: Object.fromEntries(Object.entries(R.PREM).map(([c, x]) => [c, x.max])),
-      codes: [R.premCode(T('2026-10-07T18:00')), R.premCode(T('2026-10-07T23:00')), R.premCode(T('2026-10-08T03:00')), R.premCode(T('2026-10-10T12:00')), R.premCode(T('2026-10-12T12:00')), R.premCode(T7('2026-12-28T12:00')), R.premCode(T('2026-10-07T12:00')), R.premCode(T('2026-10-12T23:00')), R.premCode(T7('2026-12-26T12:00')), R.premCode(T('2026-10-07T16:59'))],
+      codes: [R.premCode(T('2026-10-07T18:00')), R.premCode(T('2026-10-07T23:00')), R.premCode(T('2026-10-08T03:00')), R.premCode(T('2026-10-10T12:00')), R.premCode(T('2026-10-12T12:00')), R.premCode(T('2026-12-28T12:00')), R.premCode(T('2026-10-07T12:00')), R.premCode(T('2026-10-12T23:00')), R.premCode(T('2026-12-26T12:00')), R.premCode(T('2026-10-07T16:59'))],
       maj: [...R.premCounts([{ id: 'x', kind: 'enc', segs: [{ s: T('2026-10-07T21:50'), e: T('2026-10-07T22:05') }], status: 'done' }]).entries()].join(';'),
       split: [...R.premCounts([{ id: 'y', kind: 'enc', segs: [{ s: T('2026-10-07T23:00'), e: T('2026-10-08T00:30') }], status: 'done' }]).entries()].join(';'),
       src: R.PREM_SRC };
@@ -143,7 +143,7 @@ async function fixedDays(browser) {
   let n = await p.textContent('#pbName'), u = await p.textContent('#pbUnits'), s = await strip(p);
   ok(/Weekend\/holiday daytime · Thanksgiving Day/.test(n) && u === 'TST 11 of 60 units' && /time logged: 11 units/.test(await p.textContent('#pbLeft')) && s.txt === '03.01AA · Thanksgiving Day TNTA 0/28 TST 11/60 TNTP 0/8', `Mon Oct 12, 2026 (Thanksgiving): header "${n} · ${u}", strip "${s.txt}"`);
   await p.context().close();
-  p = await setup(browser, { viewport: { width: 1280, height: 860 } }, 'des26', [], '2026-12-28T12:00:00-07:00');
+  p = await setup(browser, { viewport: { width: 1280, height: 860 } }, 'des26', [], '2026-12-28T12:00:00-06:00');
   n = await p.textContent('#pbName'); u = await p.textContent('#pbUnits');
   ok(/Designated holiday for Boxing Day/.test(n) && u === 'TDES 0 of 60 units', `Mon Dec 28, 2026: header "${n} · ${u}"`);
   await p.context().close();

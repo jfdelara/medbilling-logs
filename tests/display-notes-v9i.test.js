@@ -5,7 +5,7 @@
 // multi-line, autosize, 16 px+, saved encrypted like any cell, kept as an encrypted draft if the app locks). 390 touch + 1280.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18792/medbilling-logs/ node /workspace/medbilling-logs/tests/display-notes-v9i.test.js
 const path = require('path');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium } = require('./helpers/cr-welcome');
 const URL = process.env.URL || 'http://127.0.0.1:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9i';  // v9j shots: OUT=/workspace/artifacts/mbl-v9j
 const PIN = '48203917';
@@ -22,7 +22,7 @@ async function setup(browser, o, label) {
   p.on('console', m => { if (m.type() === 'error') errors.push(label + ': ' + m.text()); }); p.on('pageerror', e => errors.push(label + ': ' + e.message));
   await p.goto(URL); await p.waitForSelector('#setupForm:not([hidden])');
   await p.check('input[name=sKind][value=pin]'); await p.fill('#sPass', PIN); await p.fill('#sPass2', PIN); await p.check('#sAck'); await p.check('#sResp'); await p.click('#sBtn');
-  await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(300);
+  await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(300); await p.evaluate(() => { const c = document.querySelector('#refCol'); if (c && c.checked) c.click(); }); await p.waitForTimeout(400);   // v9s: this suite checks the layout with Referring provider turned off (entry-window-v9r covers it on)
   await p.evaluate(async names => {
     const now = Date.now();
     for (let i = 0; i < names.length; i++) { const s = now - (names.length - i) * 30 * 60000; await window.Vault.save({ id: 'e-' + i, kind: 'enc', name: names[i], mrn: String(1234567890 + i), chart: '', label: '', initials: '', billingNote: i === 2 ? 'Consult' : '', setting: 'H', facility: null, type: '', codes: [{ c: '03.03A', k: '03.03A', d: '', j: 'AB', f: '', dx: '650' }], notes: [], segs: [{ s, e: s + 20 * 60000 }], status: 'done', photos: [], links: [], created: s, updated: s }); }
@@ -52,12 +52,13 @@ async function phone(browser) {
   const p = await setup(browser, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: IPHONE }, L);
   let g = await geo(p);
   // ---- 1. nothing pinned, narrow name, readable widths and rows
-  ok(g.fs === '13px' && Math.abs(g.nameFs - 13) < 0.6, `${L}: default grid text is 13 px on the phone (${g.fs}, name ${g.nameFs}px)`);
+  ok(g.fs === '11px' && Math.abs(g.nameFs - 11) < 0.6, `${L}: b11 phone fit: default grid text is 11 px on the phone (13 px setting, a step smaller) (${g.fs}, name ${g.nameFs}px)`);
   ok(g.pos[0] === 'static' && g.pos[1] === 'static' && g.pos[2] === 'auto', `${L}: Patient name and # are not pinned (td ${g.pos[0]}, # ${g.pos[1]}, header left ${g.pos[2]})`);
   ok(await p.locator('#dispCard').count() === 1 && await p.locator('text=Pin patient column').count() === 0, `${L}: no "Pin patient column" setting`);
   ok(g.w.name <= g.vw * 0.32 + 1 && g.w.name >= 13 * g.chS - 1, `${L}: Patient name column ~30 % of the screen (${Math.round(g.w.name)}px of ${g.vw})`);
-  ok(g.rowH >= 40, `${L}: rows are at least 40 px tall to tap (${g.rowH}px)`);
-  const mins = { mrn: 10 * g.chM, fee: 6 * g.chM + 20, dx: 5 * g.chM + 20, tin: 5 * g.chM, tout: 5 * g.chM, min: 4 * g.chM, u: 4 * g.chM };
+  // the owner 2026-10-19 phone-fit decision, public/js/app.js:34-37: phone rows are 50 % of the 40 px touch height → 20 px (v9i expected ≥ 40)
+  ok(g.rowH >= 20, `${L}: b11 phone fit: rows are half the touch height, at least 20 px (${g.rowH}px)`);
+  const mins = { mrn: 10 * g.chM, fee: 6 * g.chM + 20, dx: 5 * g.chM + 20, tin: 5 * g.chM, tout: 5 * g.chM, min: 4 * g.chM, u: 2 * g.chM };   // b11 phone fit: content-sized columns, Units fits 2 digits
   const short = Object.keys(mins).filter(k => g.w[k] < mins[k]);
   ok(!short.length, `${L}: minimum widths fit typical content (MRN 10 digits ${Math.round(g.w.mrn)}, fee 6+↗ ${Math.round(g.w.fee)}, dx 5+↗ ${Math.round(g.w.dx)}, In/Out ${Math.round(g.w.tin)}, Min ${Math.round(g.w.min)}, Units ${Math.round(g.w.u)})${short.length ? ' short: ' + short : ''}`);
   ok(g.zebra[0] !== g.zebra[1], `${L}: zebra rows (${g.zebra.join(' / ')})`);
@@ -84,15 +85,15 @@ async function phone(browser) {
   ok(await p.getAttribute('#dispSize', 'min') === '0' && await p.getAttribute('#dispSize', 'max') === '6' && await p.isVisible('.tsA.sm') && await p.isVisible('.tsA.lg'), `${L}: slider has 7 steps with a small A and a large A`);
   await setSize(p, 0);
   const pv0 = await p.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#tsPrev')).fontSize));
-  ok(pv0 === 11 && /11 px/.test(await p.textContent('#tsVal')), `${L}: slider to the small A → preview 11 px (live)`);
+  ok(pv0 === 10 && /11 px/.test(await p.textContent('#tsVal')), `${L}: slider to the small A → label 11 px, phone preview 10 px (b11 phone fit, live)`);
   await shot(p, 'textsize-small-settings-390.png');
   await today(p); const gS = await geo(p); await shot(p, 'textsize-small-390.png');
   await settings(p); await setSize(p, 6);
   const pv6 = await p.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#tsPrev')).fontSize));
-  ok(pv6 === 20 && await p.getAttribute('#dispSize', 'aria-valuetext') === '20 px', `${L}: slider to the large A → preview 20 px, aria-valuetext "20 px"`);
+  ok(pv6 === 17 && await p.getAttribute('#dispSize', 'aria-valuetext') === '20 px', `${L}: slider to the large A → aria-valuetext "20 px", phone preview 17 px (b11 phone fit)`);
   await shot(p, 'textsize-large-settings-390.png');
   await today(p); const gL = await geo(p); await shot(p, 'textsize-large-390.png');
-  ok(gL.fs === '20px' && gL.rowH > gS.rowH && gL.w.fee > gS.w.fee && gL.w.mrn > gS.w.mrn && gL.w.tin > gS.w.tin, `${L}: rows and columns scale with the text (row ${gS.rowH} → ${gL.rowH}px, fee ${Math.round(gS.w.fee)} → ${Math.round(gL.w.fee)}px, MRN ${Math.round(gS.w.mrn)} → ${Math.round(gL.w.mrn)}px)`);
+  ok(gL.fs === '17px' && gL.rowH > gS.rowH && gL.w.fee > gS.w.fee && gL.w.mrn > gS.w.mrn && gL.w.tin >= gS.w.tin, `${L}: rows and columns scale with the text (row ${gS.rowH} → ${gL.rowH}px, fee ${Math.round(gS.w.fee)} → ${Math.round(gL.w.fee)}px, MRN ${Math.round(gS.w.mrn)} → ${Math.round(gL.w.mrn)}px, In ${Math.round(gS.w.tin)} → ${Math.round(gL.w.tin)}px; b11 phone fit: In is content-sized)`);
   const appK = await p.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
   ok(appK > 16, `${L}: the rest of the app scales too (root ${appK}px)`);
   await settings(p); await p.selectOption('#dispFont', 'serif'); await p.waitForTimeout(250);
@@ -101,15 +102,18 @@ async function phone(browser) {
   await today(p); g = await geo(p);
   ok(/Georgia|ui-serif/.test(g.font), `${L}: Serif applies to the grid (${g.font.slice(0, 40)}…)`);
   // persisted locally, survives a reload (lock screen uses it too), no patient data in it
-  const ls = await p.evaluate(() => localStorage.getItem('bl.display.v1'));
-  ok(ls === '{"fs":20,"font":"serif"}', `${L}: saved on the device only: ${ls}`);
+  // v9x: kept in the encrypted settings, never in plaintext localStorage
+  const ls = await p.evaluate(async () => [localStorage.getItem('bl.display.v1'), JSON.stringify((await Vault.loadSettings()).display)]);
+  ok(ls[0] === null && ls[1] === '{"fs":20,"font":"serif"}', `${L}: saved encrypted in settings, nothing in localStorage: ${ls}`);
   await p.reload(); await p.waitForSelector('#unlockForm:not([hidden])');
   const lockFs = await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--g-fs').trim());
-  ok(lockFs === '20px', `${L}: after reload the setting is applied before unlock (${lockFs})`);
-  await unlock(p); await settings(p);
+  ok(lockFs === '11px', `${L}: v9x: lock screen uses the default (11 px on the phone, b11) (the choice is encrypted) (${lockFs})`);
+  await unlock(p);
+  ok(await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--g-fs').trim()) === '17px', `${L}: v9x: the saved size applies right after unlock (20 px → 17 px on the phone, b11)`);
+  await settings(p);
   ok(await p.inputValue('#dispSize') === '6' && await p.inputValue('#dispFont') === 'serif', `${L}: slider and font picker remember the choice after reload`);
   await p.click('#dispReset'); await p.waitForTimeout(200);
-  ok(await p.inputValue('#dispSize') === '2' && await p.inputValue('#dispFont') === 'system' && await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--g-fs').trim()) === '13px', `${L}: Reset to default → 13 px, System default`);
+  ok(await p.inputValue('#dispSize') === '2' && await p.inputValue('#dispFont') === 'system' && await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--g-fs').trim()) === '11px', `${L}: Reset to default → 13 px setting (11 px on the phone, b11), System default`);
   await today(p);
 
   // ---- v9j: the Billing notes column must have explicit px widths (iOS WebKit ignores min-width on fixed tables → 0 px)
@@ -119,7 +123,9 @@ async function phone(browser) {
     return { col: col.style.width, tw: t.style.width, td: Math.round(td.getBoundingClientRect().width), dx: Math.round(dx.getBoundingClientRect().width), ch, sum: Math.round(sum), fs: getComputedStyle(document.documentElement).getPropertyValue('--g-fs').trim() }; });
   for (const idx of [0, 6, 2]) {
     await settings(p); await setSize(p, idx); await today(p); const n = await nw();
-    ok(/px$/.test(n.col) && /px$/.test(n.tw) && Math.abs(parseFloat(n.tw) - n.sum) <= 2 && n.td >= n.dx && n.td >= 22 * n.ch - 1, `${L} v9j: Billing notes has its own px width at ${n.fs} (col ${n.col}, table ${n.tw} = Σ ${n.sum}px; notes ${n.td}px ≥ Dx ${n.dx}px and ≥ 22 ch)`);
+    // b11 phone fit (the owner 2026-10-19, app.js:34-37): notes minimum is FIT.note touch 28 ch × 0.5 = 14 ch on phones (app.js:2102, 2110);
+    // 13 ch here allows for the canvas '0' width vs the app's ch unit (v9j expected ≥ 22 ch before phone fit)
+    ok(/px$/.test(n.col) && /px$/.test(n.tw) && Math.abs(parseFloat(n.tw) - n.sum) <= 2 && n.td >= n.dx && n.td >= 13 * n.ch - 1, `${L} v9j: Billing notes has its own px width at ${n.fs} (col ${n.col}, table ${n.tw} = Σ ${n.sum}px; notes ${n.td}px ≥ Dx ${n.dx}px and ≥ 13 ch, b11 phone fit)`);
   }
   await p.locator(cell(1, 'note')).evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' })); await p.waitForTimeout(150);
   await shot(p, 'v9j-notes-column-390.png');
@@ -160,7 +166,7 @@ async function phone(browser) {
 }
 
 async function desktop(browser) {
-  // v9q: desktop checks at 1920 × 1080 (Jose's office monitor); narrower computer windows are covered by wide-v9q
+  // v9q: desktop checks at 1920 × 1080 (the owner's office monitor); narrower computer windows are covered by wide-v9q
   const L = '1920';
   const p = await setup(browser, { viewport: { width: 1920, height: 1080 } }, L);
   const g = await geo(p);

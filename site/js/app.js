@@ -14,28 +14,33 @@
   try { sessionStorage.removeItem('bl.upd'); } catch (e) { /* storage unavailable */ }
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
   const R = window.BLR, V = window.Vault;
-  // ---- v9i Display (Settings → Display): text size slider (7 steps) and font style. Device-only preference in localStorage
-  // (no patient data), applied through CSS variables before unlock, so the lock screen and the grid use it too.
+  // ---- v9i Display (Settings → Display): text size slider (7 steps) and font style, applied through CSS variables.
+  // logs-billing: kept in the encrypted settings (S.settings.display), never in localStorage; the lock screen uses the default.
   const DISP_KEY = 'bl.display.v1', TS = [11, 12, 13, 14, 16, 18, 20], TS_DEF = 13;
   const FONTS = { system: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif',
     rounded: 'ui-rounded,"SF Pro Rounded","Hiragino Maru Gothic ProN",Quicksand,Comfortaa,Manjari,"Arial Rounded MT Bold","Trebuchet MS",sans-serif',
     serif: 'ui-serif,"New York",Georgia,Cambria,"Times New Roman",Times,serif',
     mono: 'ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace' };
-  const TOUCHQ = matchMedia('(max-width:767px),(pointer:coarse)'), NARROWQ = matchMedia('(max-width:699px)');
+  const TOUCHQ = matchMedia('(max-width:767px),(pointer:coarse)'), PHONEQ = matchMedia('(max-width:480px)'), NARROWQ = matchMedia('(max-width:699px)');
   function dispLoad() {
-    let d = null; try { d = JSON.parse(localStorage.getItem(DISP_KEY) || 'null'); } catch (e) { d = null; }
+    let d = S && S.settings && S.settings.display;
     d = d && typeof d === 'object' ? d : {};
     return { fs: TS.includes(d.fs) ? d.fs : TS_DEF, font: Object.prototype.hasOwnProperty.call(FONTS, d.font) ? d.font : 'system' };
   }
   // row height follows the text (phones and touch: at least 40 px to tap comfortably); columns use the same scale (em / ch)
   function dispApply(d) {
     d = d || dispLoad(); const r = document.documentElement, st = r.style, fs = d.fs, touch = TOUCHQ.matches;
-    const h = touch ? Math.max(40, Math.round(fs * 2.6)) : Math.max(28, Math.round(fs * 2.3));
-    st.setProperty('--g-fs', fs + 'px'); st.setProperty('--g-h', h + 'px'); st.setProperty('--g-lh', Math.round(fs * 1.3) + 'px');
+    let h = touch ? Math.max(40, Math.round(fs * 2.6)) : Math.max(28, Math.round(fs * 2.3));
+    // b11 phone fit (the owner, 2026-10-19): on phones up to 480 px the sheet is half size: rows at 50 % of the touch height
+    // (40 → 20 px at the default), text a step smaller (13 → 11 px), so #, name, MRN/PHN, H/C, In and Out fit the screen
+    const phone = PHONEQ.matches, gfs = phone ? Math.max(10, Math.round(fs * 0.85)) : fs;
+    if (phone) h = Math.max(20, Math.round(h * 0.5));
+    r.classList.toggle('phonefit', phone);
+    st.setProperty('--g-fs', gfs + 'px'); st.setProperty('--g-h', h + 'px'); st.setProperty('--g-lh', Math.round(fs * 1.3) + 'px');
     st.setProperty('--app-k', String(Math.round((1 + (fs - TS_DEF) * 0.035) * 1000) / 1000)); st.setProperty('--app-font', FONTS[d.font]);
     r.dataset.fs = String(fs); r.dataset.font = d.font;
   }
-  dispApply();
+  dispApply({ fs: TS_DEF, font: 'system' });   // defaults until unlock (the saved choice is in the encrypted settings)
   // iPhone / iPad: grid text can be smaller than 16 px, so stop Safari's focus zoom (pinch-zoom still works on iOS)
   const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (IOS) { const vm = document.querySelector('meta[name=viewport]'); if (vm && !/maximum-scale/.test(vm.content)) vm.content += ', maximum-scale=1'; }
@@ -53,10 +58,10 @@
   const codeCache = {};    // prov -> {meta, codes, index, byNorm}
   // MedBilling Fee Desk (companion app). Deep links carry only a code that exists in the bundled lists (never free text,
   // so no patient identifier can end up in a URL): #/code/<fee code> and #/medres/<ICD-9 code> are Fee Desk's own routes.
-  const FD_ABS = 'https://jfdelara.github.io/delara-medbilling/';
+  const FD_ABS = 'https://feedesk.medibrisa.com/';
   const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   // the web app and Fee Desk share one origin (GitHub Pages): resolve Fee Desk next to this app, so a local copy pairs with a local Fee Desk
-  const FD = !NATIVE && /^https?:$/.test(location.protocol) && /\/medbilling-logs\//.test(location.pathname) ? new URL('../delara-medbilling/', location.origin + location.pathname.replace(/[^/]*$/, '')).href : FD_ABS;
+  const FD = !NATIVE && /^https?:$/.test(location.protocol) && /\/medbilling-logs\//.test(location.pathname) ? new URL('../feedesk/', location.origin + location.pathname.replace(/[^/]*$/, '')).href : FD_ABS;
   let ICD = null;          // {meta, list, by, index} (Alberta Health ICD-9 list from Fee Desk, bundled)
   // v9 patient fields (encrypted with the entry). Never put name/MRN in URLs or console logs.
   const ptName = e => R.ptName(e);
@@ -64,17 +69,17 @@
   const billingNoteOf = e => R.billingNoteOf(e);
   const displayWho = e => { const k = kindOf(e); if (k === 'shift') return (e.facility && e.facility.n) || 'On site'; return R.ptWho(e) || (k === 'cb' ? 'Call-back' : 'Encounter'); };
   const setMrn = (e, v) => { e.mrn = (v || '').trim(); e.chart = e.mrn; };   // keep chart mapped for older backups/exports
-  function toast(msg, ms) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms || 2200); }
+  function toast(msg, ms) { if (window.MBSuite) return window.MBSuite.toast(msg, ms || 2200); const t = $('#toast'); t.hidden = false; t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => { t.classList.remove('show'); t.hidden = true; }, ms || 2200); }   // suite M10: one shared top toast
   const fmtDur = ms => { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return `${h}:${R.pad(m)}:${R.pad(s % 60)}`; };
   const today = () => R.dayKey(Date.now());
 
   // ------------------------------------------------------------ lock / unlock
   const failKey = 'bl.fail', HAD_KEY = 'bl.had';   // v9v: marks that a vault existed here (no patient data), to explain browser storage eviction
-  const fails = () => { try { return JSON.parse(localStorage.getItem(failKey)) || { n: 0, until: 0 }; } catch (e) { return { n: 0, until: 0 }; } };
+  const fails = () => V.dev.get(failKey) || { n: 0, until: 0 };   // logs-billing: encrypted device store, not localStorage
   async function showLock(msg) {
     document.body.classList.add('locked');
     const has = await V.exists();
-    let had = null; try { had = localStorage.getItem(HAD_KEY); } catch (e) { had = null; }
+    const had = V.dev.get(HAD_KEY);
     if (!has && had && !msg) msg = `This browser removed the app's saved data for this site (last used ${had}). Your passcode and logs were kept only in this browser's storage; restore from your encrypted backup after creating a new passcode.`;
     $('#setupForm').hidden = has; $('#unlockForm').hidden = !has; $('#lockMsg').textContent = msg || '';
     const auto = !showLock.booted || document.visibilityState === 'hidden'; showLock.booted = true;
@@ -96,10 +101,10 @@
     undoFlush(); V.lock(); S = null; premBase = null; premSeen.clear(); cur = null; sessPass = null; xpPw = null; xpAckSess = false; xpJob = null; gCell = null; viewDay = null;
     $$('dialog[open]').forEach(d => { if (d.id !== 'manDlg') d.close(); });   // the user manual holds no patient data; it stays open over the lock screen
     for (const u of blobUrls) URL.revokeObjectURL(u); blobUrls = [];
-    ['#todayList', '#todayTotals', '#histList', '#ePhotos', '#eCodes', '#eCodeRes', '#eDxRes', '#credits', '#osList', '#deletedList', '#auditStatus', '#eLinks', '#facList', '#histBody', '#osInfo', '#lastBk', '#retInfo', '#eNotes', '#eSummary', '#rmSub'].forEach(s => { const el = $(s); if (el) el.innerHTML = ''; });
+    ['#clmRep', '#clmLog', '#clmBar', '#permTab', '#seatProvs', '#refList', '#refFavList', '#todayList', '#todayTotals', '#histList', '#ePhotos', '#eCodes', '#eCodeRes', '#eDxRes', '#credits', '#osList', '#deletedList', '#auditStatus', '#eLinks', '#facList', '#histBody', '#osInfo', '#lastBk', '#retInfo', '#eNotes', '#eSummary', '#rmSub'].forEach(s => { const el = $(s); if (el) el.innerHTML = ''; });
     $$('input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]), textarea').forEach(i => { i.value = ''; });
     $('#pReady').hidden = true; repFile = null;
-    placeFoot(); showLock(msg || 'Locked.');
+    dispApply(); placeFoot(); showLock(msg || 'Locked.');
   }
   $('#setupForm').addEventListener('submit', async ev => {
     ev.preventDefault(); const a = $('#sPass').value, b = $('#sPass2').value, err = $('#sErr'), kind = sKind();
@@ -173,7 +178,7 @@
   async function euDone(raw) {
     const ok = await V.unlockRaw(raw).catch(() => false); raw.fill(0);
     if (!ok) throw new Error('That didn\u2019t unlock the app. Use your passcode or passphrase.');
-    localStorage.removeItem(failKey); $('#uErr').textContent = ''; $('#euErr').textContent = ''; $('#uPass').value = ''; $('#euPin').value = '';
+    V.dev.remove(failKey); $('#uErr').textContent = ''; $('#euErr').textContent = ''; $('#uPass').value = ''; $('#euPin').value = '';
     sessPass = null; await afterUnlock(false);
   }
   async function euTry(fn) {
@@ -264,27 +269,53 @@
     $('#uBtn').disabled = false; $('#uBtn').textContent = 'Unlock';
     if (!ok) {
       f.n++; if (f.n >= 5) f.until = Date.now() + Math.min(15 * 60000, 30000 * Math.pow(2, f.n - 5));
-      localStorage.setItem(failKey, JSON.stringify(f));
+      V.dev.set(failKey, f);
       err.textContent = f.n >= 5 ? `Wrong passcode or passphrase. Wait ${Math.round((f.until - Date.now()) / 1000)} s before trying again.` : 'Wrong passcode or passphrase.';
       $('#uPass').select(); return;
     }
-    localStorage.removeItem(failKey); err.textContent = ''; sessPass = $('#uPass').value; $('#uPass').value = '';
+    V.dev.remove(failKey); err.textContent = ''; sessPass = $('#uPass').value; $('#uPass').value = '';
     await afterUnlock(false); const pw = sessPass; setTimeout(() => euOffer('existing', pw).catch(() => {}), 600);
   });
   $('#forgot').addEventListener('click', () => ask({ title: 'Forgot passcode', text: "The passcode is never stored, so there is no way to recover it or decrypt your data. If you can't remember it, the only option is to delete all data on this device and start again (you can then import an encrypted backup if you remember that backup's passcode). Type DELETE to erase everything.", fields: [{ id: 'conf', label: 'Type DELETE', type: 'text' }], ok: 'Delete everything', danger: true,
-    check: v => v.conf.trim().toUpperCase() === 'DELETE' ? '' : 'Type DELETE to confirm.' }).then(async v => { if (!v) return; if (window.EasyUnlock) await EasyUnlock.disableAll().catch(() => {}); await V.wipe(); await abForget(); localStorage.removeItem(failKey); showLock('All data deleted. Create a new passcode.'); }));
+    check: v => v.conf.trim().toUpperCase() === 'DELETE' ? '' : 'Type DELETE to confirm.' }).then(async v => { if (!v) return; if (window.EasyUnlock) await EasyUnlock.disableAll().catch(() => {}); await V.wipe(); await V.dev.wipe(); await abForget(); V.dev.remove(failKey); showLock('All data deleted. Create a new passcode.'); }));
   // built-in user manual (static, offline; no patient data). Reachable from the lock screen, Settings and the footer.
   const manDlg = $('#manDlg');
   $$('.manlink').forEach(b => b.addEventListener('click', () => { if (!manDlg.open) { manDlg.showModal(); $('#manBody').scrollTop = 0; manDlg.scrollTop = 0; } }));
   $('#manClose').addEventListener('click', () => manDlg.close());
   $$('#manBody [data-go]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); const t = document.getElementById(a.dataset.go); if (t) t.scrollIntoView({ block: 'start' }); }));
+  // logs-billing: older versions kept a few things in plaintext localStorage. Move them into encrypted storage and delete them:
+  // the failed-unlock counter, the "vault existed" marker and a pending pick go to the device store at start (needed before
+  // unlock); the display preference and the Clinical resources preferences go into the encrypted settings after unlock.
+  const LS = (() => { try { return window.localStorage; } catch (e) { return null; } })();
+  function lsMigrateDev() {
+    if (!LS) return;
+    for (const k of [failKey, HAD_KEY, PICK_KEY]) { let v = null; try { v = LS.getItem(k); } catch (e) { v = null; } if (v == null) continue;
+      if (V.dev.get(k) == null) { let x = v; try { x = JSON.parse(v); } catch (e) { x = v; } V.dev.set(k, x); } try { LS.removeItem(k); } catch (e) { /* ignore */ } }
+  }
+  function lsMigrateVault(settings) {
+    if (!LS) return false; let ch = false;
+    try { const d = LS.getItem(DISP_KEY); if (d != null) { if (!settings.display) { try { settings.display = JSON.parse(d); } catch (e) { /* bad value */ } } LS.removeItem(DISP_KEY); ch = true; } } catch (e) { /* ignore */ }
+    try { const ks = []; for (let i = 0; i < LS.length; i++) { const k = LS.key(i); if (k && k.startsWith('bl.cr.')) ks.push(k); }
+      if (ks.length) { const cr = Object.assign({}, settings.crPrefs || {}); for (const k of ks) { const n = k.slice(6); if (!(n in cr)) { try { cr[n] = JSON.parse(LS.getItem(k)); } catch (e) { /* skip */ } } LS.removeItem(k); } settings.crPrefs = cr; ch = true; } } catch (e) { /* ignore */ }
+    return ch;
+  }
+  // Clinical resources preferences (cr-init.js) are stored through this adapter: in memory from the encrypted settings while
+  // unlocked, saved with them; nothing while locked.
+  window.__mblPrefStore = {
+    getItem: k => { const n = String(k).replace(/^bl\.cr\./, ''), c = S && S.settings && S.settings.crPrefs; return c && n in c ? JSON.stringify(c[n]) : null; },
+    setItem: (k, v) => { if (!S) return; const n = String(k).replace(/^bl\.cr\./, ''); let x = v; try { x = JSON.parse(v); } catch (e) { x = v; } S.settings.crPrefs = Object.assign({}, S.settings.crPrefs || {}, { [n]: x }); saveSettings().catch(() => {}); },
+    removeItem: k => { if (!S || !S.settings.crPrefs) return; const n = String(k).replace(/^bl\.cr\./, ''); const c = Object.assign({}, S.settings.crPrefs); delete c[n]; S.settings.crPrefs = c; saveSettings().catch(() => {}); }
+  };
   async function afterUnlock(first) {
     const settings = Object.assign({}, DEF, await V.loadSettings());
+    if (lsMigrateVault(settings)) await V.saveSettings(settings);
     if (!first && !settings.autolockSet && settings.autolock === 2) { settings.autolock = 10; settings.autolockSet = false; await V.saveSettings(settings); }   // v9v: old 2-min default → 10 min (a chosen value is kept)
-    try { localStorage.setItem(HAD_KEY, R.fmtDay(today())); } catch (e) { /* storage blocked */ }
+    V.dev.set(HAD_KEY, R.fmtDay(today()));
     persistAsk();
     const encs = await V.loadAll();
-    S = { encs, settings };
+    S = { encs, settings, hidden: [] };
+    seatSplit();   // logs-billing: a staff seat only keeps the billings it may view
+    dispApply(); dispUi();   // logs-billing: display preference from the encrypted settings
     await migrateNotes();
     if (first) { settings.created = Date.now(); settings.respAccepted = Date.now(); await V.saveSettings(settings); }
     quickSet = settings.defSetting; lastAct = Date.now();
@@ -292,7 +323,7 @@
     R.setHolidays({ off: settings.holOff, extra: settings.holExtra });
     $('#defSetting').value = settings.defSetting; $('#autolock').value = String(settings.autolock); $('#warnA').value = String(settings.warnA); $('#warnR').value = String(settings.warnR);
     fillProv($('#defProv'), settings.prov); euRender(); await undoLoad();
-    renderCredits(); setQuick(); render(); renderRetention(); fpSetUi(); premSetUi(); checkBackupDue(); renderPeriodSettings(); abInit().catch(() => {});
+    renderCredits(); setQuick(); render(); seatUi(); clmLogRender(); renderRetention(); fpSetUi(); premSetUi(); checkBackupDue(); renderPeriodSettings(); abInit().catch(() => {});
     if (first) toast('Passcode set. Your logs are encrypted on this device.', 3500);
     else { const d = await V.loadDraft().catch(() => null); if (d && d.cur) { await V.clearDraft(); restoreDraft(d); toast('Restored your unsaved entry', 3000); } else if (d && d.note) { await V.clearDraft(); nedRestore(d.note); } else checkLongTimers(); }
     await pickApply();
@@ -339,6 +370,7 @@
     const i = S.encs.findIndex(x => x.id === e.id), before = i < 0 ? null : clone(S.encs[i]);
     premDirty(before); premDirty(e);   // v9o: time-premium counts to re-check
     e.kind = kindOf(e); e.updated = Date.now();
+    { const cg = claimGuard(before, e, action); if (cg) note = note ? note + '. ' + cg : cg; }   // logs-billing: owner provider, withdraw on billing changes
     if (i < 0) S.encs.push(e); else S.encs[i] = e;
     await V.save(e);
     await V.appendAudit({ action: action || (before ? 'edit' : 'create'), eid: e.id, kind: e.kind, before, after: clone(e), note: note || undefined });
@@ -454,11 +486,13 @@
   // One component: a real <table class="grid"> with a grey header row, grey row numbers, gridlines on every cell, blank rows
   // below the real ones (typing in one creates the encounter), a totals row, and Sheets-style keyboard navigation.
   // Name / MRN / notes / codes are encrypted with the entry (saveEnc). Never put them in URLs or console logs.
-  const COLS_ALL = [['rn', '#'], ['name', 'Patient name'], ['mrn', 'MRN / PHN'], ['hc', 'H/C'], ['tin', 'In'], ['tout', 'Out'], ['min', 'Min'], ['u', 'Units'], ['fno', 'Facility #'], ['fcen', 'Functional centre'], ['fee', 'Fee code(s)'], ['mod1', 'Modifier code 1'], ['mod2', 'Modifier code 2'], ['dx', 'Dx (ICD-9)'], ['ref', 'Referring provider'], ['note', 'Billing notes'], ['act', '']];
+  const COLS_ALL = [['rn', '#'], ['name', 'Patient name'], ['sex', 'Sex'], ['mrn', 'MRN / PHN'], ['hc', 'H/C'], ['tin', 'In'], ['tout', 'Out'], ['min', 'Min'], ['u', 'Units'], ['ref', 'Referring provider'], ['fno', 'Facility #'], ['fcen', 'Functional centre'], ['fee', 'Fee code'], ['mod1', 'Modifier code 1'], ['mod2', 'Modifier code 2'], ['dx', 'Diagnosis (ICD-9)'], ['note', 'Billing notes'], ['clm', 'Claim'], ['act', '']];
+  // logs-billing (the owner, 2026-10-16): Referring provider sits immediately before Facility # (sheet and Tab order); Claim
+  // (Approve/Submit, then "Queued for H-Link") after Billing notes.
   // v9r: Referring provider column (name + practitioner ID), off unless turned on in Settings
   const refOn = () => !!(S && S.settings && (S.settings.refColSet ? S.settings.refCol : true));   // v9s: on unless the user turned it off
   let COLS = COLS_ALL.filter(c => c[0] !== 'ref');
-  const NAV_ALL = ['name', 'mrn', 'hc', 'tin', 'tout', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'ref', 'note'];
+  const NAV_ALL = ['name', 'sex', 'mrn', 'hc', 'tin', 'tout', 'ref', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'note'];
   function colsSync() { const on = refOn(); COLS = COLS_ALL.filter(c => on || c[0] !== 'ref'); NAV = NAV_ALL.filter(c => on || c !== 'ref'); }
   let NAV = NAV_ALL.filter(c => c !== 'ref');   // v9o: Facility #, Functional centre before Fee code(s)
   const FPC = { fno: 1, fcen: 1 };   // v9o picker cells (Facility #, Functional centre)
@@ -476,7 +510,7 @@
   const durTxt = (e, m) => kindOf(e) === 'shift' ? `${Math.floor(m / 60)}:${R.pad(m % 60)}` : String(m);
   const uerr = m => Object.assign(new Error(m), { user: true });
   const shiftDay = (k, n) => { const d = new Date(k + 'T12:00'); d.setDate(d.getDate() + n); return R.dayKey(d.getTime()); };
-  // wall-clock HH:MM on an Edmonton calendar day -> timestamp (DST-safe; falls back to device time)
+  // wall-clock HH:MM on an Edmonton calendar day -> timestamp (UTC-6 first: Alberta Time from Nov 1, 2026; falls back to device time)
   function edmAt(k, h, mi) {
     const [y, mo, d] = k.split('-').map(Number), base = Date.UTC(y, mo - 1, d, h, mi);
     for (const off of [6, 7, 5, 8]) { const t = base + off * 3600000, w = R.edm(t); if (w.key === k && w.h === h && w.mi === mi) return t; }
@@ -500,15 +534,24 @@
   const gInp = (c, val, o) => FPC[c] ? fpCell(c, o.e || null, o.lbl) : c === 'note' ? `<div class="gc nprev" data-c="note" tabindex="0" role="button" aria-label="${esc(o.lbl)}. Opens the notes editor" data-v="${esc(val)}">${esc(notePrev(val))}</div>`
     : WRAP[c] && !(c === 'name' && NARROWQ.matches) ? `<textarea rows="1" ${gAttrs(c, o)}>${esc(val)}</textarea>`
     : `<input ${gAttrs(c, o)} value="${esc(val)}">`;
+  // b11 (the owner, 2026-10-20: AHS forms require Sex): a narrow Sex cell after Patient name. Stored in e.ma.sex (the same field as the
+  // entry window's Sex and the scan sheet). Tap / click → quick pick M, F, X, U (unknown); typing M / F / X / U on it sets it too.
+  const SEXV = { M: 'Male', F: 'Female', X: 'X', U: 'Unknown' };
+  const normSex = v => { const x = String(v == null ? '' : v).trim().toUpperCase(); return SEXV[x] ? x : x === 'MALE' ? 'M' : x === 'FEMALE' ? 'F' : x === 'UNKNOWN' ? 'U' : ''; };
+  const sexOf = e => normSex(e && e.ma && e.ma.sex);
+  const sxBtn = (v, lbl) => `<button type="button" class="gc sx" data-c="sex" aria-label="${esc(lbl)}: ${v ? SEXV[v] : 'not set'}. Tap to pick M, F, X or U" title="Sex: ${v ? SEXV[v] : 'not set'} (tap to pick, or type M / F / X / U)">${v}</button>`;
   const hcBtn = (v, lbl) => `<button type="button" class="gc hc" data-c="hc" aria-label="${esc(lbl)}: ${R.SET[v]}. Tap to switch" title="${R.SET[v]} (tap, or type H / C)">${v}</button>`;
   // v9p: Modifier code 1 / 2 open Fee Desk on its Modifiers tab too; what comes back goes into the cell it was opened from
   const modPick = (n, blank) => `<button type="button" class="cbtn hov pickfd" data-kind="mod${n}" tabindex="-1" title="${blank ? 'New row: pick' : 'Pick'} a modifier in Fee Desk (tap one there and it comes back to Modifier code ${n})" aria-label="${blank ? 'New row, pick' : 'Pick'} modifier ${n} in Fee Desk">↗</button>`;
   // v9r: ⤢ in the Patient name cell (shows on hover / on the selected row) opens the entry window; not counted in column fitting
+  const REF_BTN = '<button type="button" class="cbtn hov refpk" data-a="refpk" tabindex="-1" aria-label="Referring provider list (favourites, recent, search)" title="Referring provider list: favourites first, recent, search by name or practitioner ID (Alt+↓)">▾</button>';
+  // b11: camera scan (Name, Sex, ULI) on the row; reads on the device only (js/scan.js), confirmed before anything is saved
+  const SCAN_BTN = '<button type="button" class="rscan" data-a="scan" tabindex="-1" aria-label="Scan a health card, label or wristband" title="Scan patient: name, sex, ULI (on this device only)">📷</button>';
   const EW_BTN = '<button type="button" class="rew" data-a="ew" tabindex="-1" aria-label="Open the entry window (every field of this row)" title="Open the entry window: every field of this row (Ctrl+Enter)">⤢</button>';
   function gridRow(e, i, sp) {
     const k = kindOf(e), st = e.status, ms = R.msOf(e), m = Math.floor(ms / 60000), cs = e.codes || [], dx = R.dxList(e);
     const started = e.segs.length > 0, en = R.endOf(e), open = started && en == null, ed = k !== 'shift', id = esc(e.id);
-    const nameVal = ptName(e), mrnVal = ptMrn(e), feeVal = cs.map(c => c.c).join(', '), dxVal = dx.join(', ');
+    const nameVal = ptName(e), mrnVal = ptMrn(e), feeVal = cs.map(c => c.c).filter(Boolean).join(', '), dxVal = dx.join(', ');
     const tags = (k === 'cb' ? '<i class="tag cb" title="Call-back">CB</i>' : '') + (e.pt && S.encs.some(x => x.pt === e.pt && x.id !== e.id) ? '<i class="tag" title="Same patient as another encounter">↔</i>' : '') + ((e.photos || []).length ? `<i class="tag" title="${e.photos.length} photo(s)">📷${e.photos.length}</i>` : '') + (R.notesOf(e).length ? `<i class="tag" title="${R.notesOf(e).length} note(s) in details">✎</i>` : '');
     const name = ed ? gInp('name', nameVal, { lbl: 'Patient name', ph: nameVal ? '' : (e.label || e.initials || ''), title: !nameVal && (e.label || e.initials) ? [e.label, e.initials].filter(Boolean).join(' · ') : '' })
       : `<span class="gtxt">On site${e.facility ? ' · ' + esc(e.facility.n) : ''}</span>`;
@@ -517,28 +560,30 @@
       + (started ? (e.late ? '<i class="tag lt" title="Entered later (typed or corrected after the fact)">*</i>' : '') : `<button type="button" class="cbtn now soft" data-a="now" tabindex="-1" title="Start the clock now" aria-label="Start now">▶</button>`);
     const tout = open ? gInp('tout', '', { lbl: 'Time out (24-hour HH:MM). Running', mono: 1, max: 5, im: 'numeric', title: 'Running. Type the end time, or tap ■ to stop now' }) + '<button type="button" class="cbtn stop" data-a="stop" tabindex="-1" title="Stop now" aria-label="Stop now">■</button>'
       : gInp('tout', started ? R.hm(en) : '', { lbl: 'Time out (24-hour HH:MM)', mono: 1, max: 5, im: 'numeric', title: st === 'pause' ? 'Paused (⋯ to resume)' : 'Out' + multi });
-    const fee = ed ? gInp('fee', feeVal, { lbl: 'Fee code(s)', mono: 1, max: CODE_MAX, cap: 'characters', title: cs.map(c => c.c + (c.d ? ' ' + c.d : '')).join('; ') })
-      + `<button type="button" class="cbtn hov pickfd" data-kind="fee" tabindex="-1" title="Pick a fee code in Fee Desk (tap a code there and it comes back to this cell)" aria-label="Pick fee code in Fee Desk">↗</button>${feeVal ? `<button type="button" class="cbtn hov fdmini pickfd" data-kind="fee" data-at="${esc((cs[cs.length - 1] && (cs[cs.length - 1].k || cs[cs.length - 1].c)) || '')}" tabindex="-1" title="Open ${esc(cs[cs.length - 1] && cs[cs.length - 1].c)} in Fee Desk (pick another code there to add it)" aria-label="Open fee code in Fee Desk">ⓘ</button>` : ''}` : '';
-    const dxc = ed ? gInp('dx', dxVal, { lbl: 'Diagnostic code(s), ICD-9', mono: 1, max: CODE_MAX, cap: 'characters', title: dx.map(v => v + (dxDesc(v) ? ' ' + dxDesc(v) : '')).join('; ') })
-      + `<button type="button" class="cbtn hov pickfd" data-kind="dx" tabindex="-1" title="Pick an ICD-9 code in Fee Desk (tap a code there and it comes back to this cell)" aria-label="Pick diagnostic code in Fee Desk">↗</button>${dxVal ? `<button type="button" class="cbtn hov fdmini pickfd" data-kind="dx" data-at="${esc(dx[dx.length - 1])}" tabindex="-1" title="Open ${esc(dx[dx.length - 1])} in Fee Desk (pick another code there to add it)" aria-label="Open diagnostic code in Fee Desk">ⓘ</button>` : ''}` : '';
+    const fee = ed ? gInp('fee', feeVal, { lbl: 'Fee code', mono: 1, max: CODE_MAX, cap: 'characters', title: cs.map(c => c.c + (c.d ? ' ' + c.d : '')).join('; ') })
+      + `<button type="button" class="spfd pickfd" data-kind="fee" tabindex="-1" title="Pick a fee code in Fee Desk (tap a code there and it comes back to this cell)" aria-label="Pick fee code in Fee Desk">Fee Desk</button>${feeVal ? `<button type="button" class="cbtn hov fdmini pickfd" data-kind="fee" data-at="${esc((cs[cs.length - 1] && (cs[cs.length - 1].k || cs[cs.length - 1].c)) || '')}" tabindex="-1" title="Open ${esc(cs[cs.length - 1] && cs[cs.length - 1].c)} in Fee Desk (pick another code there to add it)" aria-label="Open fee code in Fee Desk">ⓘ</button>` : ''}` : '';
+    const dxc = ed ? gInp('dx', dxVal, { lbl: 'Diagnosis (ICD-9)', mono: 1, max: CODE_MAX, cap: 'characters', title: dx.map(v => v + (dxDesc(v) ? ' ' + dxDesc(v) : '')).join('; ') })
+      + `<button type="button" class="cbtn hov pickfd" data-kind="dx" tabindex="-1" title="Pick an ICD-9 code in Fee Desk (tap a code there and it comes back to this cell)" aria-label="Pick diagnosis (ICD-9) in Fee Desk">↗</button>${dxVal ? `<button type="button" class="cbtn hov fdmini pickfd" data-kind="dx" data-at="${esc(dx[dx.length - 1])}" tabindex="-1" title="Open ${esc(dx[dx.length - 1])} in Fee Desk (pick another code there to add it)" aria-label="Open diagnostic code in Fee Desk">ⓘ</button>` : ''}` : '';
     const modc = n => { if (!ed) return ''; const inp = gInp('mod' + n, modOf(e, n), { lbl: 'Modifier code(s) ' + n, mono: 1, max: MOD_MAX, cap: 'characters' }), ch = muChips(e, n); return `<div class="cw mucw">${inp}${ch}${modPick(n, false)}</div>`; };   // v9o: always wrapped, so a units chip can appear beside a focused cell
     const wl = warnLvl(e);
     const spCls = sp && sp.g ? ' spg' + (sp.c ? ' spc' : '') + (sp.n ? ' spn' : '') : '', spOk = ed && (nameVal || mrnVal);   // v9p: same-patient rows grouped
     return `<tr class="gr ${st} k-${k}${wl ? ' w' + wl : ''}${spCls}" data-key="${id}" data-id="${id}">`
       + `<th scope="row" class="rn" title="Row ${i}. Right-click or press and hold for actions">${st === 'run' || st === 'pause' ? `<i class="dot ${st}" aria-label="${st === 'run' ? 'Running' : 'Paused'}"></i>` : ''}${i}${spOk ? `<button type="button" class="spb" data-a="same" tabindex="-1" aria-label="Same patient: add an encounter row below" title="Same patient: new row below with the name, MRN / PHN, facility, functional centre and H/C (times and codes blank)"><b aria-hidden="true">＋</b><small aria-hidden="true">same</small></button>` : ''}</th>`
-      + `<td class="c-name"><div class="cw">${name}${tags}${ed ? EW_BTN : ''}</div></td>`
+      + `<td class="c-name"><div class="cw">${name}${tags}${ed ? SCAN_BTN + EW_BTN : ''}</div></td>`
+      + `<td class="c-sex">${ed ? sxBtn(sexOf(e), 'Sex') : ''}</td>`
       + `<td class="c-mrn">${ed ? gInp('mrn', mrnVal, { lbl: 'MRN or PHN', mono: 1, max: 24 }) : ''}</td>`
       + `<td class="c-hc">${ed ? hcBtn(e.setting === 'C' ? 'C' : 'H', 'Hospital or clinic') : '<span class="gtxt mid">–</span>'}</td>`
       + `<td class="c-tin"><div class="cw">${tin}</div></td>`
       + `<td class="c-tout"><div class="cw">${tout}</div></td>`
       + `<td class="num c-min${open ? ' live' : ''}" data-rm="${id}" title="${started ? (k === 'shift' ? 'Hours on site' : m + ' min') : 'Not started'}">${started ? (open ? fmtDur(ms) : durTxt(e, m)) : ''}</td>`
       + `<td class="num c-u" data-ru="${id}">${started && ed ? R.units(m) : ''}</td>`
+      + (refOn() ? `<td class="c-ref">${ed ? `<div class="cw">${gInp('ref', refTxt(e), { lbl: 'Referring provider (name, practitioner ID)', max: 120, title: refTxt(e) })}${REF_BTN}</div>` : ''}</td>` : '')
       + `<td class="c-fno">${ed ? gInp('fno', '', { e, lbl: 'Facility #' }) : ''}</td><td class="c-fcen">${ed ? gInp('fcen', '', { e, lbl: 'Functional centre' }) : ''}</td>`
       + `<td class="c-fee"><div class="cw">${fee}</div></td>`
       + `<td class="c-mod1">${modc(1)}</td><td class="c-mod2">${modc(2)}</td>`
       + `<td class="c-dx"><div class="cw">${dxc}</div></td>`
-      + (refOn() ? `<td class="c-ref">${ed ? gInp('ref', refTxt(e), { lbl: 'Referring provider (name, practitioner ID)', max: 120, title: refTxt(e) }) : ''}</td>` : '')
       + `<td class="c-note">${ed ? gInp('note', billingNoteOf(e), { lbl: 'Billing notes', max: 500 }) : ''}</td>`
+      + `<td class="c-clm">${ed ? clmCell(e) : ''}</td>`
       + `<td class="c-act"><button type="button" class="rmore" data-a="more" tabindex="-1" aria-label="Row actions" title="Timer, add time, segments and photos, same patient, delete">⋯</button></td></tr>`;
   }
   // v9o: unit count chip(s) beside a time-unit modifier (TEV, TNTP, TNTA, TWK, TST, TDES, EV, NTPM, NTAM, WK)
@@ -551,7 +596,7 @@
   const perTxtOf = e => { const p = R.periodSplit(e).parts.filter(x => !R.PBY[x.id].regular); return p.length ? R.perTxt(p, true) : ''; };
   // v9h: rows far below the work area are "light": the same cells without editors (hundreds of empty textareas would slow
   // every keystroke). A light row gets its editors the moment the cursor moves to it or it is tapped (lightUp).
-  const lightRow = i => `<tr class="gr blank light" data-key="r${i}" data-blank="1" data-light="1"><th scope="row" class="rn">${i}</th><td class="c-name"></td><td class="c-mrn"></td><td class="c-hc dim"></td><td class="c-tin"></td><td class="c-tout"></td><td class="num c-min"></td><td class="num c-u"></td><td class="c-fno"></td><td class="c-fcen"></td><td class="c-fee"></td><td class="c-mod1"></td><td class="c-mod2"></td><td class="c-dx"></td>${refOn() ? '<td class="c-ref"></td>' : ''}<td class="c-note"></td><td class="c-act"></td></tr>`;
+  const lightRow = i => `<tr class="gr blank light" data-key="r${i}" data-blank="1" data-light="1"><th scope="row" class="rn">${i}</th><td class="c-name"></td><td class="c-sex"></td><td class="c-mrn"></td><td class="c-hc dim"></td><td class="c-tin"></td><td class="c-tout"></td><td class="num c-min"></td><td class="num c-u"></td>${refOn() ? '<td class="c-ref"></td>' : ''}<td class="c-fno"></td><td class="c-fcen"></td><td class="c-fee"></td><td class="c-mod1"></td><td class="c-mod2"></td><td class="c-dx"></td><td class="c-note"></td><td class="c-clm"></td><td class="c-act"></td></tr>`;
   function lightUp(tr) {
     if (!tr || !tr.dataset.light) return tr;
     const tpl = document.createElement('template'); tpl.innerHTML = '<table><tbody>' + blankRow(tr.sectionRowIndex + 1, false) + '</tbody></table>';
@@ -564,19 +609,20 @@
     if (light) return lightRow(i);
     const key = 'r' + i, set = blankSet[key] || quickSet;
     return `<tr class="gr blank" data-key="${key}" data-blank="1"><th scope="row" class="rn">${i}</th>`
-      + `<td class="c-name"><div class="cw">${gInp('name', '', { lbl: 'Patient name (new row)', ph: first ? 'Patient name…' : '' })}</div></td>`
+      + `<td class="c-name"><div class="cw">${gInp('name', '', { lbl: 'Patient name (new row)', ph: first ? 'Patient name…' : '' })}${first ? SCAN_BTN.replace('class="rscan"', 'class="rscan first"') : ''}</div></td>`
+      + `<td class="c-sex">${sxBtn('', 'Sex (new row)')}</td>`
       + `<td class="c-mrn">${gInp('mrn', '', { lbl: 'MRN or PHN (new row)', mono: 1, max: 24, ph: first ? 'MRN / PHN' : '' })}</td>`
       + `<td class="c-hc dim${blankSet[key] ? ' set' : ''}">${hcBtn(set, 'Hospital or clinic for a new row')}</td>`
-      + `<td class="c-tin"><div class="cw">${gInp('tin', '', { lbl: 'Time in (new row)', mono: 1, max: 5, im: 'numeric', ph: first ? 'HH:MM' : '' })}<button type="button" class="cbtn now${first ? '' : ' hov'}" data-a="now" tabindex="-1" title="New row, start the clock now" aria-label="New row, start now">▶</button></div></td>`
+      + `<td class="c-tin"><div class="cw">${gInp('tin', '', { lbl: 'Time in (HH:MM), new row', mono: 1, max: 5, im: 'numeric', ph: first ? '--:--' : '' })}<button type="button" class="cbtn now${first ? '' : ' hov'}" data-a="now" tabindex="-1" title="New row, start the clock now" aria-label="New row, start now">▶</button></div></td>`
       + `<td class="c-tout">${gInp('tout', '', { lbl: 'Time out (new row)', mono: 1, max: 5, im: 'numeric' })}</td>`
       + '<td class="num c-min"></td><td class="num c-u"></td>'
+      + (refOn() ? `<td class="c-ref"><div class="cw">${gInp('ref', '', { lbl: 'Referring provider (new row)', max: 120 })}${REF_BTN}</div></td>` : '')
       + `<td class="c-fno">${gInp('fno', '', { lbl: 'Facility # (new row)' })}</td><td class="c-fcen">${gInp('fcen', '', { lbl: 'Functional centre (new row)' })}</td>`
-      + `<td class="c-fee"><div class="cw">${gInp('fee', '', { lbl: 'Fee code(s) (new row)', mono: 1, max: CODE_MAX, cap: 'characters' })}<button type="button" class="cbtn hov pickfd" data-kind="fee" tabindex="-1" title="New row: pick a fee code in Fee Desk (it comes back to this cell)" aria-label="New row, pick fee code in Fee Desk">↗</button></div></td>`
+      + `<td class="c-fee"><div class="cw">${gInp('fee', '', { lbl: 'Fee code (new row)', mono: 1, max: CODE_MAX, cap: 'characters' })}<button type="button" class="spfd pickfd" data-kind="fee" tabindex="-1" title="New row: pick a fee code in Fee Desk (it comes back to this cell)" aria-label="New row, pick fee code in Fee Desk">Fee Desk</button></div></td>`
       + `<td class="c-mod1"><div class="cw mucw">${gInp('mod1', '', { lbl: 'Modifier code(s) 1 (new row)', mono: 1, max: MOD_MAX, cap: 'characters' })}${modPick(1, true)}</div></td>`
       + `<td class="c-mod2"><div class="cw mucw">${gInp('mod2', '', { lbl: 'Modifier code(s) 2 (new row)', mono: 1, max: MOD_MAX, cap: 'characters' })}${modPick(2, true)}</div></td>`
-      + `<td class="c-dx"><div class="cw">${gInp('dx', '', { lbl: 'Diagnostic code(s) (new row)', mono: 1, max: CODE_MAX, cap: 'characters' })}<button type="button" class="cbtn hov pickfd" data-kind="dx" tabindex="-1" title="New row: pick an ICD-9 code in Fee Desk (it comes back to this cell)" aria-label="New row, pick diagnostic code in Fee Desk">↗</button></div></td>`
-      + (refOn() ? `<td class="c-ref">${gInp('ref', '', { lbl: 'Referring provider (new row)', max: 120 })}</td>` : '')
-      + `<td class="c-note">${gInp('note', '', { lbl: 'Billing notes (new row)', max: 500 })}</td><td class="c-act"></td></tr>`;
+      + `<td class="c-dx"><div class="cw">${gInp('dx', '', { lbl: 'Diagnosis (ICD-9) (new row)', mono: 1, max: CODE_MAX, cap: 'characters' })}<button type="button" class="cbtn hov pickfd" data-kind="dx" tabindex="-1" title="New row: pick an ICD-9 code in Fee Desk (it comes back to this cell)" aria-label="New row, pick diagnostic code in Fee Desk">↗</button></div></td>`
+      + `<td class="c-note">${gInp('note', '', { lbl: 'Billing notes (new row)', max: 500 })}</td><td class="c-clm"></td><td class="c-act"></td></tr>`;
   }
   // v9p: which rows are the same patient: linked by "Same patient" (e.pt), or the same MRN / PHN typed on both
   const mrnKey = e => String(ptMrn(e) || '').replace(/[^0-9a-z]/gi, '').toUpperCase();
@@ -600,7 +646,7 @@
   const linesHtml = l => l.map(x => `<span>${esc(x)}</span>`).join('');
   function gFoot(list, day) {
     const t = gTotals(list, day);
-    return `<tfoot><tr class="gt"><th scope="row" class="rn" aria-label="Totals">Σ</th><td class="c-name"><span class="gtxt" data-tn>${t.n} encounter${t.n === 1 ? '' : 's'}${t.p < t.n ? ` · ${t.p} patient${t.p === 1 ? '' : 's'}` : ''}</span></td><td></td><td></td><td></td><td class="tl"><span class="gtxt">Total</span></td><td class="num" data-tm title="Total time (hours and minutes)">${t.mTxt}</td><td class="num" data-tu title="Total units">${t.u}</td><td colspan="${refOn() ? 8 : 7}" class="tdet"><span class="gtxt" data-td>${esc(t.det)}</span></td><td></td></tr>`
+    return `<tfoot><tr class="gt"><th scope="row" class="rn" aria-label="Totals">Σ</th><td class="c-name"><span class="gtxt" data-tn>${t.n} encounter${t.n === 1 ? '' : 's'}${t.p < t.n ? ` · ${t.p} patient${t.p === 1 ? '' : 's'}` : ''}</span></td><td class="c-sex"></td><td></td><td></td><td></td><td class="tl"><span class="gtxt">Total</span></td><td class="num" data-tm title="Total time (hours and minutes)">${t.mTxt}</td><td class="num" data-tu title="Total units">${t.u}</td><td colspan="${refOn() ? 9 : 8}" class="tdet"><span class="gtxt" data-td>${esc(t.det)}</span></td><td></td></tr>`
       + `<tr class="gts"${t.lines.length ? '' : ' hidden'}><td colspan="${COLS.length}" class="tsum"><div class="tsumi" data-tl aria-label="Totals by setting and time period">${linesHtml(t.lines)}</div></td></tr></tfoot>`;
   }
   function sumFit(t) {   // the lines block spans the visible width; the totals row sits right above it (both pinned on Today)
@@ -728,6 +774,7 @@
     if (f === 'note') { if ((e.billingNote || '') === v) return null; e.billingNote = v; return 'Billing note edited in spreadsheet'; }
     if (f === 'ref') { const r = parseRef(v); return applyRef(e, r.n, r.id); }
     if (f === 'refObj') return applyRef(e, raw && raw.n, raw && raw.id);
+    if (f === 'sex') { const nv = normSex(v); if (sexOf(e) === nv) return null; const ma = Object.assign({}, e.ma || {}); if (nv) ma.sex = nv; else delete ma.sex; e.ma = ma; return nv ? `Sex set to ${nv} in spreadsheet` : 'Sex cleared in spreadsheet'; }
     if (f === 'hc') { const nv = v === 'C' ? 'C' : 'H'; if (e.setting === nv) return null; e.setting = nv; return `Setting changed to ${R.SET[nv]} in spreadsheet`; }
     if (f === 'tin' || f === 'tout') return applyTime(e, f, v, day);
     if (f === 'mod1' || f === 'mod2') {   // v9k: several codes per cell, separated by commas or spaces; saved upper-case, no duplicates
@@ -742,28 +789,48 @@
       return `Modifier code(s) ${f.slice(3)} edited in spreadsheet` + (Object.keys(typedU).length ? ' (' + Object.entries(typedU).map(([c, u]) => `${c} ${R.p2(u)} units`).join(', ') + ')' : '');
     }
     if (f === 'fee') {
-      const parts = v.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean), prev = (e.codes || []).map(c => c.c).join(', ');
+      // F5: ICD-only lines ({c:'', dx}) are kept where they are; typed codes are matched to the old lines by code (never by
+      // position), so a new code never inherits another line's Dx; empty codes are only filtered for display / comparison
+      const parts = v.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean), prev = (e.codes || []).map(c => c.c).filter(Boolean).join(', ');
       if (parts.join(', ').toUpperCase() === prev.toUpperCase()) return null;
       const prov = S.settings.prov || 'AB'; await codesFor(prov).catch(() => null); const o = codeCache[prov];
-      const old = e.codes || [];
-      e.codes = parts.map((c, i) => { const was = old[i] || {}, hit = o && o.byNorm.get(norm(c));
-        return hit ? Object.assign({}, was, { c: hit.c || hit.k || c, k: hit.k || c, d: hit.d || '', j: prov, f: hit.f || '' }) : Object.assign({}, was, { c: c.toUpperCase(), k: c.toUpperCase(), d: '', j: prov, f: '' }); });
-      if (!e.codes.length && old.some(c => c.dx)) e.dx = old.find(c => c.dx).dx;   // keep the diagnostic code when the fee code is cleared
-      return 'Fee code(s) edited in spreadsheet';
+      const old = e.codes || [], used = new Set();
+      const same = (x, c, cc) => x.c && (norm(x.c) === norm(c) || norm(x.c) === norm(cc) || (x.k && norm(x.k) === norm(c)));
+      const ccOf = c => { const hit = o && o.byNorm.get(norm(c)); return hit ? (hit.c || hit.k || c) : c.toUpperCase(); };
+      const realOld = old.map((x, i) => i).filter(i => old[i].c);   // indexes of the real fee lines (not ICD-only ones)
+      const typed = parts.map((c, idx) => { const hit = o && o.byNorm.get(norm(c)), cc = ccOf(c);
+        let wi = old.findIndex((x, i) => !used.has(i) && same(x, c, cc));
+        // as in the entry window (:1399): a code typed over another one (that is no longer in the cell) keeps that line's
+        // details; only among real fee lines, so an appended code never borrows a Dx
+        const ri = realOld[idx]; if (wi < 0 && ri != null && !used.has(ri) && !parts.some(t => same(old[ri], t, ccOf(t)))) wi = ri;
+        if (wi >= 0) used.add(wi);
+        const was = wi >= 0 ? old[wi] : {};
+        return hit ? Object.assign({}, was, { c: cc, k: hit.k || c, d: hit.d || '', j: prov, f: hit.f || '' }) : Object.assign({}, was, { c: cc, k: cc, d: '', j: prov, f: '' }); });
+      const codes = typed.slice(); old.forEach((x, i) => { if (!x.c) codes.splice(Math.min(i, codes.length), 0, Object.assign({}, x)); });
+      e.codes = codes;
+      if (!e.codes.some(c => c.c) && !e.codes.some(c => c.dx) && old.some(c => c.dx)) e.dx = old.find(c => c.dx).dx;   // keep the diagnostic code when the fee code is cleared
+      return 'Fee code edited in spreadsheet';
     }
     if (f === 'dx') {
       const parts = v.split(/[,;\s]+/).map(s => dxCode(s) || s.trim().toUpperCase()).filter(Boolean);
       if (parts.join(', ') === R.dxList(e).join(', ')) return null;
       await loadIcd().catch(() => null);
       const uniq = parts.filter((x, i, a) => a.indexOf(x) === i);
-      // v9m: one Dx beside each fee code in order; more Dx than fee codes are kept too (e.dxx), never dropped
+      // v9m: more Dx than fee codes are kept too (e.dxx), never dropped
       if (!(e.codes || []).length) { e.dx = uniq[0] || ''; if (!e.dx) delete e.dx; setDxx(e, uniq.slice(1)); }
       else {
-        e.codes = e.codes.map((c, i) => { const x = Object.assign({}, c); if (uniq[i]) { x.dx = uniq[i]; x.dxd = dxDesc(uniq[i]); } else if (i >= uniq.length) { delete x.dx; delete x.dxd; } return x; });
-        setDxx(e, uniq.slice(e.codes.length));
-        delete e.dx;
+        // F5: matched by code, never by position: a line whose Dx is still typed keeps it (an ICD-only line {c:'', dx} too);
+        // a line whose Dx was removed loses it (an ICD-only line whose Dx was removed is removed); new Dx codes go beside the
+        // fee codes that have none (in row order), the rest are extras (e.dxx)
+        const has = d => uniq.some(x => norm(x) === norm(d));
+        const codes = e.codes.filter(c => c.c || (c.dx && has(c.dx))).map(c => { const x = Object.assign({}, c); if (x.dx && !has(x.dx)) { delete x.dx; delete x.dxd; } return x; });
+        const fresh = uniq.filter(d => !codes.some(c => c.dx && norm(c.dx) === norm(d)));
+        for (const c of codes) if (c.c && !c.dx && fresh.length) { const d = fresh.shift(); c.dx = d; c.dxd = dxDesc(d); }
+        e.codes = codes; delete e.dx;
+        if (!codes.length) { e.dx = fresh.shift() || ''; if (!e.dx) delete e.dx; }   // no line left: back to an entry-level Dx
+        setDxx(e, fresh);
       }
-      return 'Diagnostic code(s) edited in spreadsheet';
+      return 'Diagnosis (ICD-9) edited in spreadsheet';
     }
     return null;
   }
@@ -786,7 +853,8 @@
     if (S && (n || id)) S.settings.recRef = [{ n, id }].concat((S.settings.recRef || []).filter(x => !(x.n === n && x.id === id))).slice(0, 12);
     return n || id ? `Referring provider set (${[n, id].filter(Boolean).join(', ')})` : 'Referring provider cleared';
   }
-  const dxxHtml = e => R.dxExtra(e).map(x => `<span class="sc"><span class="dxc">Dx ${esc(x)}</span></span>`).join('');   // v9m: more Dx than fee codes
+  const scIcd = v => { const p = icdRow(v); return `<span class="sc" title="${esc(p.title)}" aria-label="${esc(rowAria(p))}" role="text">${rowHtml(p)}</span>`; };
+  const dxxHtml = e => R.dxExtra(e).map(scIcd).join('');   // v9m: more Dx than fee codes; b11: ICD-only rows   // v9m: more Dx than fee codes
   function setDxx(e, list) { const l = (list || []).filter(Boolean); if (l.length) e.dxx = l; else delete e.dxx; }
   function applyTime(e, f, v, day) {
     const segs = clone(e.segs || []), now = Date.now(), stamp = () => { e.edits = (e.edits || []).concat(now); };
@@ -890,6 +958,23 @@
     if (tr.dataset.blank) { blankSet[tr.dataset.key] = nv; b.textContent = nv; b.parentNode.classList.add('set'); b.title = R.SET[nv] + ' (tap, or type H / C)'; return; }
     if (b.textContent.trim() === nv) return; b.textContent = nv; gridSave(tr.dataset.id, 'hc', nv);
   }
+  function sexSet(b, v) {
+    const tr = b.closest('tr'), nv = normSex(v); if (!tr) return;
+    if (b.textContent.trim() === nv) return; b.textContent = nv;
+    if (tr.dataset.blank) return createFromBlank(tr, 'sex', nv);
+    gridSave(tr.dataset.id, 'sex', nv);
+  }
+  // quick pick under the cell (same look as the scan menu): M, F, X, U, and Clear when set
+  function sexPick(b) {
+    scanMenuClose(); const cur = b.textContent.trim(), m = document.createElement('div'); m.className = 'scanmenu sexpick'; m.setAttribute('role', 'menu'); m.setAttribute('aria-label', 'Sex');
+    m.innerHTML = Object.keys(SEXV).map(k => `<button type="button" role="menuitemradio" aria-checked="${cur === k}" data-sx="${k}"${cur === k ? ' class="on"' : ''}><b>${k}</b> ${SEXV[k]}</button>`).join('') + (cur ? '<button type="button" role="menuitem" data-sx="" class="clr">Clear</button>' : '');
+    document.body.appendChild(m); scanMenu = m;
+    const r = b.closest('td').getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+    m.style.left = Math.max(6, Math.min(innerWidth - mw - 6, r.left)) + 'px';
+    m.style.top = (r.bottom + mh + 6 < innerHeight ? r.bottom + 2 : Math.max(6, r.top - mh - 2)) + 'px';
+    m.addEventListener('click', ev => { const x = ev.target.closest('[data-sx]'); if (!x) return; scanMenuClose(); sexSet(b, x.dataset.sx); });
+    (m.querySelector('.on') || m.querySelector('button')).focus({ preventScroll: true });
+  }
   const entryOf = el => { const tr = el && el.closest('tr[data-id]'); return tr && S ? S.encs.find(x => x.id === tr.dataset.id) : null; };
   // v9h: add GROW_BY empty rows at the end (row numbers continue); focus, caret and the rows above are untouched
   function growGrid(t) {
@@ -966,6 +1051,7 @@
         ev.preventDefault(); commitCell(c); return gMove(c, 0, ev.shiftKey ? -1 : 1, true);   // Enter = next cell to the right (Shift+Enter = left)
       }
       if (k === 'Escape') { if (isIn && (c.value !== c.defaultValue || gEdit)) { ev.preventDefault(); ev.stopPropagation(); c.value = c.defaultValue; gEdit = false; c.select(); fitSoon(c.closest('table.grid')); } return; }
+      if ((k === 'F4' || (k === 'ArrowDown' && ev.altKey)) && c.dataset.c === 'ref') { ev.preventDefault(); return refPick(c.closest('tr')); }   // logs-billing: referring provider list
       if ((k === 'F4' || (k === 'ArrowDown' && ev.altKey)) && (c.dataset.c === 'mod1' || c.dataset.c === 'mod2')) {   // v9o: units picker
         ev.preventDefault(); const tr = c.closest('tr'), id = tr && tr.dataset.id, root2 = c.closest('#todayList, #histList'), n = c.dataset.c.slice(3);
         const go = () => { const r2 = id && root2 && [...root2.querySelectorAll('tbody tr')].find(x => x.dataset.id === id), b = r2 && r2.querySelector(`td.c-mod${n} .mub`); if (b) muCell(b); else toast('Units are for time-unit modifiers (TEV, TNTP, TNTA, TWK, TST, TDES, EV, NTPM, NTAM, WK)'); };
@@ -987,6 +1073,7 @@
         if (k.length === 1 && !ev.ctrlKey && !ev.metaKey && !ev.altKey) { ev.preventDefault(); return nedOpen(c, k); }
       }
       if (k === 'F2' && isIn) { ev.preventDefault(); gEdit = true; const n = c.value.length; c.setSelectionRange(n, n); return; }
+      if (!isIn && c.classList.contains('sx')) { if (/^[mMfFxXuU]$/.test(k)) { ev.preventDefault(); sexSet(c, k); } else if (k === 'Backspace' || k === 'Delete') { ev.preventDefault(); sexSet(c, ''); } else if (k === ' ' || k === 'F2' || (k === 'ArrowDown' && ev.altKey)) { ev.preventDefault(); sexPick(c); } return; }
       if (!isIn) { if (/^[hHcC]$/.test(k)) { ev.preventDefault(); hcToggle(c, k.toUpperCase()); } return; }
       if (k.length === 1 && !ev.ctrlKey && !ev.metaKey && !ev.altKey) gEdit = true;
       if (k === 'Backspace' || k === 'Delete') gEdit = true;
@@ -1004,6 +1091,7 @@
       const ed = t.closest && t.closest('input.gc, textarea.gc');
       if (ed && document.activeElement === ed) { const s = getSelection(), td = ed.closest('td'); if (s && s.anchorNode && td && !td.contains(s.anchorNode)) { const n = ed.value.length; ed.setSelectionRange(n, n); } }
       const hc = t.closest('.gc.hc'); if (hc) return hcToggle(hc);
+      const sx = t.closest('.gc.sx'); if (sx) return sexPick(sx);
       const np = t.closest('.gc.nprev'); if (np) return nedOpen(np);
       const mb = t.closest('.mub'); if (mb) return muCell(mb);   // v9o: units 01–20 of a time-unit modifier
       const fp = t.closest('.gc.fpv'); if (fp) return fpkCell(fp);
@@ -1015,6 +1103,10 @@
         if (a.dataset.a === 'stop' && e) return act(e, 'stop');
         if (a.dataset.a === 'more' && e) return openRowMenu(e);
         if (a.dataset.a === 'ew' && tr) return ewOpen(tr);   // v9r
+        if (a.dataset.a === 'scan' && tr) return scanRow(tr);   // b11
+        if (a.dataset.a === 'refpk' && tr) return refPick(tr);   // logs-billing
+        if (a.dataset.a === 'apv' && e) return approveClaim(e.id, 'sheet');
+        if (a.dataset.a === 'clm' && e) return claimInfo(e);
         if (a.dataset.a === 'same' && e) { if (ev.detail > 1) return; if (!matchMedia('(pointer:fine)').matches) return sameRow(e); clearTimeout(spT); spT = setTimeout(() => sameRow(e), 280); return; }   // with a mouse, wait: a double-click on the row number opens the details instead
         return;
       }
@@ -1040,8 +1132,8 @@
   // calls, modifiers with a units box each, and the expected payment → visit details, checks (live) and the expected total.
   // Every text field has a ▾ list of choices and still takes typing. EW_HEAD / EW_LINE / EW_FOOT are plain lists:
   // reorder them to change the layout. Expected payments are estimates from the bundled Alberta SOMB data (fees-AB.json).
-  const EW_HEAD = [{ k: 'name', l: 'Patient name', span: 2 }, { k: 'mrn', l: 'ULI / PHN or MRN', mono: 1 }, { k: 'sex', l: 'Sex', sel: [['', '–'], ['F', 'Female'], ['M', 'Male'], ['X', 'X / other']] },
-    { k: 'prov', l: 'Billing physician' }, { k: 'skill', l: 'Specialty (skill code)', mono: 1, cap: 'characters' }, { k: 'ba', l: 'BA number', mono: 1 }, { k: 'hc', l: 'Hospital / Clinic', sel: [['H', 'H · Hospital'], ['C', 'C · Clinic']] },
+  const EW_HEAD = [{ k: 'name', l: 'Patient name', span: 2 }, { k: 'mrn', l: 'ULI / PHN or MRN', mono: 1 }, { k: 'sex', l: 'Sex', sel: [['', '–'], ['M', 'M · Male'], ['F', 'F · Female'], ['X', 'X'], ['U', 'U · Unknown']] },
+    { k: 'prov', l: 'Billing physician' }, { k: 'skill', l: 'Specialty', mono: 1, cap: 'characters' }, { k: 'ba', l: 'BA number', mono: 1 }, { k: 'hc', l: 'Hospital / Clinic', sel: [['H', 'H · Hospital'], ['C', 'C · Clinic']] },
     { k: 'refNm', l: 'Referring physician', ref: 1 }, { k: 'refId', l: 'Referring practitioner ID', mono: 1, im: 'numeric', ref: 1 }, { k: 'fno', l: 'Facility #', mono: 1, im: 'numeric', pk: 'fno' }, { k: 'fcen', l: 'Functional centre', mono: 1, cap: 'characters', pk: 'fcen' },
     { k: 'loc', l: 'Site / location', span: 2 }];
   const EW_FOOT = [{ k: 'admit', l: 'Admitted on', date: 1 }, { k: 'encNo', l: 'Visit # that day', sel: [['', '–']].concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => [String(n), String(n)])) }, { k: 'tin', l: 'In (24 h)', mono: 1, im: 'numeric', ph: 'HH:MM' }, { k: 'tout', l: 'Out (24 h)', mono: 1, im: 'numeric', ph: 'HH:MM' },
@@ -1102,7 +1194,8 @@
   function ewHtml(v) {
     const n = ewLineCount(v), head = EW_HEAD.filter(f => !f.ref || refOn());
     let lines = ''; for (let i = 0; i < n; i++) lines += ewLineHtml(i, ewModCount(v, i));
-    return `<fieldset class="ewg"><legend>Claim details</legend><div class="ewgrid">${head.map(f => ewFld(f)).join('')}</div></fieldset>`
+    return `<div class="ewmode" role="group" aria-label="Patient details: type or photo"><span class="ewml">Patient</span><button type="button" class="on" data-ewm="type" aria-pressed="true">⌨ Type</button><button type="button" data-ewm="scan" aria-pressed="false">📷 Photo</button></div>`   // b11: Type or Photo/Scan
+      + `<fieldset class="ewg"><legend>Claim details</legend><div class="ewgrid">${head.map(f => ewFld(f)).join('')}</div></fieldset>`
       + `<div class="ewlines" id="ewLines">${lines}</div><button type="button" class="ewaddl" id="ewAddLine">＋ Add billing line</button>`
       + `<fieldset class="ewg"><legend>Visit details</legend><div class="ewgrid">${EW_FOOT.map(f => ewFld(f)).join('')}</div></fieldset>`
       + `<section class="ewchecks" aria-live="polite"><b>Checks</b><ul id="ewChecks"></ul></section>`;
@@ -1137,7 +1230,7 @@
     const F = FEES && FEES[code]; if (!F) return null;
     const num = s => parseFloat(String(s).replace(/[%$,\s]/g, '')) || 0, pct = s => /%\s*$/.test(String(s));
     let base = F[0]; const how = [];
-    if (skill && F[1] && F[1][skill] != null) { base = +F[1][skill]; how.push(`${skill} rate ${money(base)}`); } else if (base != null) how.push(`base ${money(base)}`);
+    if (skill && F[1] && F[1][skill] != null) { base = +F[1][skill]; how.push(`${skill} rate ${money(base)}`); } else if (base != null) how.push(`fee ${money(base)}`);
     const noBase = base == null; if (noBase) base = 0;
     let add = 0; const unknown = [], needU = [];
     for (const m of mods) {
@@ -1161,6 +1254,7 @@
   function ewCalc() {
     if (!ew) return; const v = ewRead(), lines = ewLinesRead(v), prov = S.settings.prov || 'AB', o = codeCache[prov], skill = String(v.skill || '').trim().toUpperCase(), sex = v.sex, chk = [];
     let total = 0, priced = 0;
+    if (!sex && (v.name || v.mrn)) chk.push('Sex not set (AHS claim forms need M, F, X or U)');   // b11: a reminder only
     for (const l of lines) {
       const n = l.i + 1, hit = l.code && o && o.byNorm.get(norm(l.code)), h1 = ewF(`s${l.i}_code_h`), h2 = ewF(`s${l.i}_dx_h`);
       if (h1) h1.textContent = l.code ? (hit ? hit.d : (o ? 'Not in the bundled Alberta schedule' : '')) : '';
@@ -1182,7 +1276,7 @@
         if (fl.includes('t') && !l.mods.some(m => SURT.includes(m.c))) chk.push(`${l.code} needs a time modifier (${SURT.join(', ')}) with units`);
         if (f.unknown.length) chk.push(`${f.unknown.join(', ')} ${f.unknown.length > 1 ? 'are' : 'is'} not listed as a modifier for ${l.code}`);
         if (f.needU.length) chk.push(`${f.needU.join(', ')} on ${l.code}: enter the units`);
-        if (f.F[1] && !skill) chk.push(`${l.code} pays by specialty: set the skill code to see the right rate`);
+        if (f.F[1] && !skill) chk.push(`${l.code} pays by specialty: set the specialty to see the right rate`);
       } else { if (pay) pay.textContent = FEES ? 'n/a' : '…'; if (brk) brk.textContent = FEES ? 'No fee data for this code' : ''; }
       for (const m of l.mods) if (R.isMu(m.c) && m.u && +m.u > 20) chk.push(`${m.c}: time units go up to 20`);
     }
@@ -1203,6 +1297,66 @@
   }
   const ewTr = () => { if (!ew) return null; const t = ew.root.querySelector(`table.grid[data-day="${CSS.escape(ew.day)}"]`); if (!t) return null;
     return ew.id ? t.querySelector(`tbody tr[data-id="${CSS.escape(ew.id)}"]`) : t.querySelector(`tbody tr[data-key="${CSS.escape(ew.key)}"]`) || t.querySelector('tbody tr[data-blank]'); };
+  // b11: scan → confirm sheet → the row's entry window opens with Name, Sex and ULI filled in; Save there writes it (as any edit)
+  function ewScanFill(v) {
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val) { el.value = val; el.dispatchEvent(new Event('change', { bubbles: true })); } };
+    set('ew_name', v.name); set('ew_mrn', v.uli); set('ew_sex', v.sex);
+    toast('Scanned values filled in. Check them, then Save.', 3200);
+  }
+  // b11: the entry window's own "Photo/Scan" choice: same scan sheet, fills this window (nothing saved until Save)
+  function ewScan() {
+    if (!window.MBScan) return toast('Scanning is not available in this build');
+    const g = k => { const el = ewF(k); return el ? el.value : ''; };
+    window.MBScan.open({ name: g('name'), sex: g('sex'), uli: g('mrn') }, v => { ewScanFill(v); ewMode('type'); });
+  }
+  function ewMode(m) { $$('#ewBody [data-ewm]').forEach(b => { const on = b.dataset.ewm === m; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }); }
+  function scanRow(tr) {
+    if (!window.MBScan) return toast('Scanning is not available in this build');
+    const e = tr.dataset.blank ? null : entryOf(tr);
+    window.MBScan.open({ name: e ? ptName(e) : '', sex: e && e.ma ? e.ma.sex : '', uli: e ? ptMrn(e) : '' }, v => {
+      ewOpen(tr);
+      requestAnimationFrame(() => {
+        ewScanFill(v);
+      });
+    });
+  }
+  // b11: tapping an EMPTY patient cell (Name, MRN/PHN/ULI) or a blank row's number on a touch screen offers
+  // "Scan with camera" or "Type it". A cell that already has a value edits directly; 📷 still opens the scan sheet.
+  const SCAN_COLS = { name: 1, mrn: 1, uli: 1, sex: 1 };
+  let scanMenu = null;
+  function scanMenuClose() { if (scanMenu) { scanMenu.remove(); scanMenu = null; } }
+  function scanMenuOpen(tr, anchor, type) {
+    scanMenuClose(); const m = document.createElement('div'); m.className = 'scanmenu'; m.setAttribute('role', 'menu');
+    m.innerHTML = '<button type="button" role="menuitem" data-m="scan">📷 Scan with camera</button><button type="button" role="menuitem" data-m="type">⌨ Type it</button>';
+    document.body.appendChild(m); scanMenu = m;
+    const r = anchor.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+    m.style.left = Math.max(6, Math.min(innerWidth - mw - 6, r.left)) + 'px';
+    m.style.top = (r.bottom + mh + 6 < innerHeight ? r.bottom + 2 : Math.max(6, r.top - mh - 2)) + 'px';
+    m.addEventListener('click', ev => { const b = ev.target.closest('[data-m]'); if (!b) return; scanMenuClose(); if (b.dataset.m === 'scan') scanRow(tr); else type(); });
+    m.querySelector('button').focus({ preventScroll: true });
+  }
+  document.addEventListener('pointerdown', ev => { if (scanMenu && !scanMenu.contains(ev.target)) scanMenuClose(); }, true);
+  document.addEventListener('keydown', ev => { if (scanMenu && ev.key === 'Escape') { ev.preventDefault(); scanMenuClose(); } }, true);
+  { let t0 = null;
+    $('#todayList').addEventListener('touchstart', ev => { const t = ev.touches && ev.touches[0]; t0 = t && ev.touches.length === 1 ? { x: t.clientX, y: t.clientY, at: Date.now() } : null; }, { passive: true });
+    $('#todayList').addEventListener('touchend', ev => {
+      const s0 = t0; t0 = null; if (!s0 || !S || !window.MBScan) return; const t = ev.changedTouches && ev.changedTouches[0]; if (!t) return;
+      if (Math.abs(t.clientX - s0.x) > 8 || Math.abs(t.clientY - s0.y) > 8 || Date.now() - s0.at > 600) return;   // a scroll or long-press, not a tap
+      const el = ev.target; if (el.closest('button:not(.rn)') && !el.closest('th.rn') && !el.closest('.gc.sx')) return;
+      const tr = el.closest('tr.gr'); if (!tr) return;
+      const rn = el.closest('th.rn'), gc = !rn && el.closest('.gc'), key = gc && gc.dataset.c;
+      if (rn) return;   // b11: a row number always opens the entry window, which offers Type or Photo/Scan at the top
+      else if (!gc || !SCAN_COLS[key] || String(gc.value || gc.textContent || '').trim()) return;
+      if (document.activeElement === gc) return;   // already typing in it
+      ev.preventDefault();   // no focus / keyboard until a choice is made
+      if (tr.dataset.light) lightUp(tr);
+      scanMenuOpen(tr, rn || gc.closest('td'), () => {
+        if (rn) return ewOpen(tr);
+        if (key === 'sex') { const b = tr.querySelector('.gc.sx'); if (b) return sexPick(b); }
+        const c = tr.querySelector(`.gc[data-c="${key}"]`); if (c) c.focus();
+      });
+    }, { passive: false });
+  }
   function ewOpen(tr) {
     if (!S || !tr) return; const root = tr.closest('#todayList, #histList'), t = tr.closest('table.grid'); if (!root || !t) return;
     const e = tr.dataset.blank ? null : entryOf(tr); if (e && kindOf(e) === 'shift') return openEdit(e);
@@ -1214,7 +1368,7 @@
       ew.init = ewVals(e2); if (e2 && facNoOf(e2)) ew.fno = { no: facNoOf(e2), n: R.facNmTxt(e2) };
       const d = $('#ewDlg'); $('#ewBody').innerHTML = ewHtml(ew.init); d.classList.toggle('phone', SHEET());
       ewFill(ew.init);
-      d.classList.toggle('wide', !!S.settings.ewWide); d.style.width = S.settings.ewW && !SHEET() ? Math.min(S.settings.ewW, innerWidth - 24) + 'px' : ''; d.style.height = ''; ewHead(e2, tr2); $('#ewErr').textContent = ''; ewMenuClose();
+      d.classList.toggle('wide', !!S.settings.ewWide); d.style.width = S.settings.ewW && !SHEET() ? Math.min(S.settings.ewW, innerWidth - 24) + 'px' : ''; d.style.height = ''; ewHead(e2, tr2); ewApvUi(); $('#ewErr').textContent = ''; ewMenuClose();
       if (!d.open) d.showModal(); d.querySelector('.ewbody').scrollTop = 0;
       const first = ewF('name'); if (first && (FINE() || !COARSE())) { first.focus({ preventScroll: true }); first.select(); } else $('#ewT').setAttribute('tabindex', '-1'), $('#ewT').focus({ preventScroll: true });
       if (!AHF) loadAhf().catch(() => {}); ewCalc(); Promise.all([loadFees(), codesFor((S.settings.prov) || 'AB').catch(() => {}), loadIcd().catch(() => {})]).then(() => ewCalc());
@@ -1337,8 +1491,8 @@
       if (fq) R.FCEN_ALL.filter(f => m(f[0] + ' ' + f[1])).slice(0, 12).forEach(f => add('All codes', f[0], f[0], f[1]));
       out.push({ act: 'pk', pk: 'fcen', label: 'Full functional centre list…' });
     } else if (k === 'fee') {
-            ewRecent(e => (e.codes || []).map(c => ({ key: c.c, c: c.c, d: c.d || '' })), 30).filter(c => m(c.c + ' ' + c.d)).slice(0, 10).forEach(c => add('Recent', c.c, c.c, c.d));
-      if (q) (await searchCodes(q, st.prov || 'AB').catch(() => [])).forEach(c => add('Fee schedule search', c.c, c.c, c.d));
+            ewRecent(e => (e.codes || []).filter(c => c.c).map(c => ({ key: c.c, c: c.c, d: c.d || '', f: c.f || '' })), 30).filter(c => m(c.c + ' ' + c.d)).slice(0, 10).forEach(c => add('Recent', c.c, c.c, c.d, { row: logsRow([c]) }));
+      if (q) (await searchCodes(q, st.prov || 'AB').catch(() => [])).forEach(c => add('Fee code search', c.c, c.c, c.d, { row: logsRow([c]) }));
       out.push({ act: 'fd', fd: 'fee', label: 'Search in Fee Desk ↗' });
     } else if (k === 'mod') {
       ewRecent(e => [1, 2].flatMap(n => String(modOf(e, n) || '').split(/[,\s]+/)).filter(Boolean), 20).filter(c => m(c)).forEach(c => add('Recent', c, c, R.isMu(c) ? 'time units' : ''));
@@ -1347,10 +1501,11 @@
       if (q && /^[A-Za-z]+\d*$/.test(q) && !out.some(o => o.v === q.toUpperCase())) add('Typed', q.toUpperCase(), q.toUpperCase(), 'use as typed');
       out.push({ act: 'fd', fd: /^s0_/.test(k0) ? 'mod1' : 'mod2', label: 'Pick in Fee Desk ↗' });
     } else if (k === 'dx') {
-      ewRecent(e => R.dxList(e), 30).filter(c => m(c + ' ' + dxDesc(c))).slice(0, 10).forEach(c => add('Recent', c, c, dxDesc(c)));
-      if (q) (await searchDx(q).catch(() => [])).forEach(c => add('ICD-9 search', c.c, c.c, c.d));
+      ewRecent(e => R.dxList(e), 30).filter(c => m(c + ' ' + dxDesc(c))).slice(0, 10).forEach(c => add('Recent', c, c, dxDesc(c), { row: icdRow(c) }));
+      if (q) (await searchDx(q).catch(() => [])).forEach(c => add('ICD-9 search', c.c, c.c, c.d, { row: icdRow(c.c, c.d) }));
       out.push({ act: 'fd', fd: 'dx', label: 'Search in Fee Desk ↗' });
     } else if (k === 'refNm' || k === 'refId') {
+      (st.favRef || []).filter(x => m(x.n + ' ' + x.id)).forEach(x => add('Favourite referring providers', k === 'refNm' ? x.n : x.id, k === 'refNm' ? x.n || '(no name)' : x.id || '(no ID)', k === 'refNm' ? x.id : x.n, { ref: x }));
       const l = (st.recRef || []).concat(ewRecent(e => e.refNm || e.refId ? { key: (e.refNm || '') + '\u0001' + (e.refId || ''), n: e.refNm || '', id: e.refId || '' } : null, 20, 365));
       l.filter(x => m(x.n + ' ' + x.id)).forEach(x => add('Recent referring providers', k === 'refNm' ? x.n : x.id, k === 'refNm' ? x.n || '(no name)' : x.id || '(no ID)', k === 'refNm' ? x.id : x.n, { ref: x }));
       if (!out.length) out.push({ note: 'No referring providers yet. Type the name and practitioner ID; they are remembered for next time.' });
@@ -1393,7 +1548,8 @@
       if (x.note) { h += `<p class="ewnote">${esc(x.note)}</p>`; return; }
       if (x.act) { h += `<button type="button" class="ewo act${i === ewM.hi ? ' hi' : ''}" role="option" data-i="${i}" tabindex="-1">${esc(x.label)}</button>`; return; }
       if (x.sec !== sec) { sec = x.sec; h += `<div class="ewsec" role="presentation">${esc(sec)}</div>`; }
-      h += `<button type="button" class="ewo${i === ewM.hi ? ' hi' : ''}" role="option" data-i="${i}" tabindex="-1"><span class="ewc mono">${esc(x.code)}</span>${x.d ? `<span class="ewd">${esc(x.d)}</span>` : ''}</button>`;
+      h += x.row && x.row.kind !== 'empty' ? `<button type="button" class="ewo crewo${i === ewM.hi ? ' hi' : ''}" role="option" data-i="${i}" tabindex="-1" title="${esc(x.row.title)}" aria-label="${esc(rowAria(x.row))}">${rowHtml(x.row)}</button>`
+        : `<button type="button" class="ewo${i === ewM.hi ? ' hi' : ''}" role="option" data-i="${i}" tabindex="-1"><span class="ewc mono">${esc(x.code)}</span>${x.d ? `<span class="ewd">${esc(x.d)}</span>` : ''}</button>`;
     });
     const mn = $('#ewMenu'); mn.innerHTML = h; mn.hidden = false; el.setAttribute('aria-expanded', 'true'); ewMenuPlace();
     const hi = mn.querySelector('.ewo.hi'); if (hi) hi.scrollIntoView({ block: 'nearest' });
@@ -1423,6 +1579,7 @@
     const e = id && S.encs.find(x => x.id === id); if (e) pickInFeeDesk(e, kind); else toast('Type something in the row first (a name, MRN / PHN or a time), then pick in Fee Desk');
   }
   $('#ewBody').addEventListener('click', ev => {
+    const md = ev.target.closest('[data-ewm]'); if (md) { if (md.dataset.ewm === 'scan') return ewScan(); ewMode('type'); const f = ewF('name'); if (f) f.focus(); return; }
     const dd = ev.target.closest('[data-dd]'); if (dd) { if (ewM && ewM.k === dd.dataset.dd) return ewMenuClose(); ewF(dd.dataset.dd).focus({ preventScroll: true }); return ewMenuOpen(dd.dataset.dd, false, true); }
     const pk = ev.target.closest('[data-pk]'); if (pk) return ewPk(pk.dataset.pk);
     const fd = ev.target.closest('[data-fd]'); if (fd) return ewFd(fd.dataset.fd);
@@ -1826,12 +1983,14 @@
     $('#fnoRecList').innerHTML = rec.length ? rec.map(n => fRow(n, 'fav')).join('') : '<p class="small muted">Facilities you pick show here.</p>';
     const ff = new Set(st.favFcen || []);
     $('#fcenFavList').innerHTML = R.FCEN.concat(R.FCEN_MORE.filter(f => ff.has(f[0]))).map(f => `<button type="button" class="chipbtn${ff.has(f[0]) ? ' on' : ''}" data-fcen="${esc(f[0])}" aria-pressed="${ff.has(f[0])}">${ff.has(f[0]) ? '★' : '☆'} ${esc(f[0])} - ${esc(f[1])}</button>`).join('');
+    const fr = st.favRef || []; if ($('#refFavList')) $('#refFavList').innerHTML = fr.length ? fr.map(r => `<div class="fpsrow"><span><b>${esc(r.n || '(no name)')}</b> <small class="muted mono">${esc(r.id || 'no ID')}</small></span><button type="button" class="linkbtn sm" data-unref="${esc(r.n)}" data-unrefid="${esc(r.id)}">Remove</button></div>`).join('') : '<p class="small muted">None yet. Tap ☆ in the Referring provider list (▾ in the cell).</p>';
     $('#fpSrc').textContent = AHF ? ahfSrc() : 'Facility numbers and names: Alberta Health facility listing (loads when first used).';
   }
   $('#fcCarry').addEventListener('change', async () => { S.settings.fcCarry = $('#fcCarry').checked; await saveSettings(); });
   $('#refCol').addEventListener('change', async () => { S.settings.refCol = $('#refCol').checked; S.settings.refColSet = true; await saveSettings(); colsSync(); { const tw = $('#todayList .gwrap'), ae = document.activeElement; if (tw) { if (ae && tw.contains(ae)) ae.blur(); tw.innerHTML = ''; } } histStale = true; render(); requestAnimationFrame(() => { if (!S) return; if (fillRows() !== fillRows.last) render(true); else fitAll(); sizeGrid(); const t = $('#todayList table.grid'), w = t && t.closest('.gwrap'); let g = 0; while (t && w && g++ < 5 && t.offsetHeight < w.clientHeight + 60) growGrid(t); }); /* v9s: refill like a text-size change (a shorter header must not leave the frame short); the frame is kept (its height decides how many empty rows fill it); render() redraws the table with the new columns */ toast(S.settings.refCol ? 'Referring provider column on' : 'Referring provider column off (saved names stay with each entry)'); });
   $('#fpCard').addEventListener('click', async ev => {
     const t = ev.target, st = S && S.settings; if (!st) return;
+    if (t.dataset.unref != null) { const n = t.dataset.unref, id = t.dataset.unrefid || ''; st.favRef = (st.favRef || []).filter(r => !((r.n || '') === n && (r.id || '') === id)); await saveSettings(); return fpSetUi(); }
     if (t.dataset.unfav) { st.favFno = (st.favFno || []).filter(n => n !== t.dataset.unfav); await saveSettings(); return fpSetUi(); }
     if (t.dataset.fav) { st.favFno = (st.favFno || []).filter(n => n !== t.dataset.fav).concat(t.dataset.fav); await saveSettings(); return fpSetUi(); }
     const fc = t.closest('[data-fcen]'); if (fc) { const c = fc.dataset.fcen, l = st.favFcen || []; st.favFcen = l.includes(c) ? l.filter(x => x !== c) : l.concat(c); await saveSettings(); return fpSetUi(); }
@@ -1859,7 +2018,7 @@
   }
   let dispT = 0;
   function dispSet(d) {
-    try { localStorage.setItem(DISP_KEY, JSON.stringify({ fs: d.fs, font: d.font })); } catch (e) { /* storage blocked: applies until reload */ }
+    if (S) { S.settings.display = { fs: d.fs, font: d.font }; saveSettings().catch(() => {}); }
     dispApply(d); dispUi();
     cancelAnimationFrame(dispT); dispT = requestAnimationFrame(() => { if (!S) return; if (fillRows() !== fillRows.last) render(true); else fitAll(); sizeGrid(); });
   }
@@ -1868,6 +2027,7 @@
   $('#dispReset').addEventListener('click', () => dispSet({ fs: TS_DEF, font: 'system' }));
   dispUi();
   TOUCHQ.addEventListener('change', () => { dispApply(); if (S) fitAll(); });
+  PHONEQ.addEventListener('change', () => { dispApply(); if (S) fitAll(); });
   NARROWQ.addEventListener('change', () => { if (S) render(true); });
   $('#todayList').addEventListener('scroll', growOnScroll, { capture: true, passive: true });
   window.addEventListener('scroll', () => { if (tab === 'today') { growOnScroll(); pagePinSoon(); } }, { passive: true });
@@ -1893,12 +2053,21 @@
   // the Today grid fills the window below the toolbar (it scrolls inside, like Sheets, with the header and totals pinned)
   // v9o: the grid reaches the bottom of the screen (above the iPhone home indicator); the footer (units rule, disclaimers,
   // links, manual) lives inside the grid's scroll area after the last row, so it shows only when you scroll past the rows.
+  const TBH = () => { const t = $('#tabs'); return t && t.getClientRects().length && getComputedStyle(t).position === 'fixed' ? t.offsetHeight : 0; };
   const SAB = () => { let p = $('#sabProbe'); if (!p) { p = document.createElement('div'); p.id = 'sabProbe'; p.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none'; document.body.appendChild(p); } return p.offsetHeight || 0; };
   function sizeGrid() {
     const w = $('#todayList .gwrap'); if (!w || tab !== 'today' || document.body.classList.contains('locked')) return;
-    const top = w.getBoundingClientRect().top + window.scrollY, h = Math.max(300, Math.floor(window.innerHeight - top - 4 - SAB()));
+    const top = w.getBoundingClientRect().top + window.scrollY, h = Math.max(300, Math.floor(window.innerHeight - top - 4 - Math.max(SAB(), TBH() && Math.max(TBH(), (parseFloat(getComputedStyle(document.body).paddingBottom) || 0) - 4))));
     if (w.style.height !== h + 'px') w.style.height = h + 'px';
-    const g = w.querySelector(':scope > .gfoot'); if (g && g.style.width !== w.clientWidth + 'px') g.style.width = w.clientWidth + 'px';
+    const g = w.querySelector(':scope > .gfoot'); if (g && g.style.width !== w.clientWidth + 'px') g.style.width = w.clientWidth + 'px';    gFade(w);
+  }
+  // b11: a soft fade at the right edge of the Today sheet on phones while more columns are off-screen
+  function gFade(w) {
+    const box = $('#todayList'); if (!box || !w) return;
+    let f = box.querySelector(':scope > .gfade'); if (!f) { f = document.createElement('div'); f.className = 'gfade'; f.setAttribute('aria-hidden', 'true'); box.appendChild(f); }
+    f.style.top = (w.offsetTop + 1) + 'px'; f.style.height = Math.max(0, w.clientHeight - 2) + 'px'; f.style.bottom = 'auto';
+    const upd = () => f.classList.toggle('end', w.scrollLeft + w.clientWidth >= w.scrollWidth - 2); upd();
+    if (!w._fadeL) { w._fadeL = true; w.addEventListener('scroll', upd, { passive: true }); }
   }
   function placeFoot() {
     const FOOT = placeFoot.f || (placeFoot.f = document.querySelector('footer.foot')); if (!FOOT) return; const w = S && tab === 'today' && !document.body.classList.contains('locked') ? $('#todayList .gwrap.main') : null;
@@ -1908,6 +2077,8 @@
       g.style.width = w.clientWidth + 'px'; document.body.classList.add('footin');
     } else { const m = $('#main'); if (m && FOOT.previousElementSibling !== m) m.after(FOOT); document.body.classList.remove('footin'); }
   }
+  // suite parity: whatever grows above the grid (banners, the shared bar) re-fits it so it always ends above the bottom tab bar
+  if (window.ResizeObserver) { let rq = 0; new ResizeObserver(() => { if (!rq) rq = requestAnimationFrame(() => { rq = 0; sizeGrid(); }); }).observe(document.querySelector('.top') || document.body); const pb = document.querySelector('.pbar'); if (pb) new ResizeObserver(() => sizeGrid()).observe(pb); { let rq2 = 0; const ro2 = new ResizeObserver(() => { if (!rq2) rq2 = requestAnimationFrame(() => { rq2 = 0; sizeGrid(); }); }); [...document.querySelectorAll('#tab-today > *')].filter(e => e.id !== 'todayList').forEach(e => ro2.observe(e)); } }   /* suite-parity: re-size the Today grid when anything above it (day toolbar wrap, reminders) changes height, so it never runs under the bottom tab bar */
   window.addEventListener('resize', () => { sizeGrid(); placeFoot(); if (S && tab === 'today' && fillRows() !== fillRows.last) render(true); else if (S) fitAll(); });
   function fillRows() {
     const w = $('#todayList .gwrap'), r = w && (w.querySelector('tbody tr[data-blank]') || w.querySelector('tbody tr')), rh = (r && r.offsetHeight) || 30;   // v9q: an empty row's height (a first row with a wrapped name is taller and left the grid short)
@@ -1949,7 +2120,7 @@
   // v9i: [min desktop, min touch, max] in characters ('0' widths of the column's font, cell padding included), so the
   // minimums scale with Settings → Display → Text size: MRN/PHN 10 digits, Fee code 6 + ↗, Dx 5 + ↗, Billing notes wider.
   // Patient name on a narrow screen: at most ~30 % of the width (one line, ellipsis; the full name shows on focus).
-  // v9k (Jose: several codes per patient; narrow / shallow code cells were hard to fill): Fee code(s) and Dx fit ~15 code
+  // v9k (the owner: several codes per patient; narrow / shallow code cells were hard to fill): Fee code(s) and Dx fit ~15 code
   // characters next to their ↗ ⓘ buttons, the two Modifier columns ~15 characters, before anything wraps; the cell being
   // edited is at least two lines tall (CSS) and every code cell wraps and grows the row instead of clipping.
   const CODEC = { fee: 1, mod1: 1, mod2: 1, dx: 1 };
@@ -1961,7 +2132,8 @@
   const CMIN = { ref: 5.5, name: 11, mrn: 11, fno: 7, fcen: 6.5, fee: 11, mod1: 9, mod2: 9, dx: 10, note: 9 };
   const WIDEFIT = (ww, touch) => !touch && ww >= 900;
   function fitPx(key, need, ch, ww, touch) {
-    const cfg = FIT[key], mn = cfg[touch ? 1 : 0] * ch; let max = cfg[2] * ch;
+    const cfg = FIT[key], ph = ww <= 480, mn = cfg[touch ? 1 : 0] * ch * (ph ? 0.5 : 1); let max = cfg[2] * ch * (ph ? 0.75 : 1);   // b11 phone: half the minimum (empty columns stay narrow), columns grow with what is entered
+    if (ph && key === 'name') max = Math.min(max, Math.max(mn, ww * 0.34));
     if (key === 'name' && ww < 700) max = Math.min(max, Math.max(mn, ww * 0.30));
     else if (CODEC[key] && ww < 700) max = Math.min(max, Math.max(mn, ww * 0.62));
     else if (FPC[key] && ww < 700) max = Math.min(max, Math.max(mn, ww * (key === 'fno' ? 0.42 : 0.36)));   // v9o phone: the code / number always shows, the name where room   // v9k phone: a code column never takes the whole screen; long lists wrap
@@ -1986,7 +2158,7 @@
     let rec = fitEC.get(el);
     if (!rec || rec.k !== ck) {
       const line = txt.split('\n').reduce((m, x) => x.length > m.length ? x : m, '');
-      const extra = cw ? cw.querySelectorAll('.cbtn, .tag').length * fitBtn : 0;
+      const extra = cw ? cw.querySelectorAll('.cbtn, .tag').length * fitBtn + cw.querySelectorAll('.spfd').length * (PHONEQ.matches ? 34 : fitBtn) : 0;   // suite parity: room for the labelled two-line "Fee Desk" button (as wide as the old ↗ button off phones)
       const tok = (el.classList.contains('fpv') ? (el.dataset.v || '') : txt).split(el.dataset.c === 'name' ? /[\s-]+/ : /\s+/).reduce((m, x) => x.length > m.length ? x : m, '');   // v9q: the longest word / code never breaks (names may break after a hyphen; picker cells: the code)
       rec = { k: ck, tw: fitMw(line, f) + 18 + extra, wmin: fitMw(tok, f) + 18 + extra, multi: line !== txt }; fitEC.set(el, rec);
     }
@@ -2020,7 +2192,8 @@
     const sans = t.querySelector('tbody .gc[data-c="name"]'), mono = t.querySelector('tbody .gc.mono'), th = t.querySelector('thead th.h-name');
     const fS = sans ? fontOf(sans) : '13px sans-serif', fM = mono ? fontOf(mono) : fS, fH = th ? fontOf(th) : fS;
     const memo = { ww, touch, wide: WIDEFIT(ww, touch), fS, fM, px: {}, head: {}, ch: {} };
-    { const fsx = parseFloat(getComputedStyle(t).fontSize) || 13; fitBtn = Math.round(touch ? Math.max(30, fsx * 1.9 + 4) : Math.max(25, fsx * 1.55 + 6)); }   // ↗ / ▶ / tags
+    { const fsx = parseFloat(getComputedStyle(t).fontSize) || 13; fitBtn = Math.round(PHONEQ.matches ? Math.max(18, fsx * 1.5) : touch ? Math.max(30, fsx * 1.9 + 4) : Math.max(25, fsx * 1.55 + 6)); }   // ↗ / ▶ / tags
+    t.style.setProperty('--spfdw', (PHONEQ.matches ? 32 : fitBtn - 2) + 'px');
     const cols = [...t.querySelectorAll('colgroup col')], keys = cols.map(c => c.className.replace(/^c-/, ''));
     const fixed = cols.map((c, i) => FIT[keys[i]] ? 0 : (parseFloat(getComputedStyle(c).width) || 0));   // reads first
     let sum = 0, noteW = 0, noteCol = null, changed = false, onlyRec = null; const longs = [], widths = {}, fcols = {}, cmin = {}, tmins = {}, wide = WIDEFIT(ww, touch);
@@ -2028,7 +2201,7 @@
       const key = keys[i], cfg = FIT[key];
       if (!cfg) { sum += fixed[i]; return; }
       const h = t.querySelector(`thead [data-h="${key}"]`), isM = key !== 'name' && key !== 'note' && key !== 'ref', f = isM ? fM : fS, ch = fitMw('0', f);
-      let need = h ? fitMw(h.textContent, fH) + 18 : 0, tmin = 0; memo.head[key] = need; memo.ch[key] = ch;
+      let need = h ? fitMw(h.textContent, fH) + (ww <= 480 ? 6 : 18) : 0, tmin = 0; memo.head[key] = need; memo.ch[key] = ch;
       for (const el of t.querySelectorAll(`tbody .gc[data-c="${key}"]`)) {
         const txt = txtOf(el); if (!txt) continue;
         const rec = fitRec(el, f, txt);
@@ -2066,6 +2239,7 @@
     for (const k of ['fno', 'fcen']) { const nar = !!(wide && widths[k] != null && tmins[k] && widths[k] < tmins[k] + 6 * (memo.ch[k] || 8));
       if (t.classList.contains('nar-' + k) !== nar) { t.classList.toggle('nar-' + k, nar); changed = true; } }
     memo.fitw = fitw;
+    if (!wide && widths.note != null && widths.dx != null && widths.note < widths.dx) widths.note = widths.dx;   // suite parity: Billing notes never narrower than Dx (v9j), even with the wider Fee Desk fee column
     for (const key of Object.keys(widths)) {
       const px = widths[key], col = fcols[key]; memo.px[key] = px;
       if (key === 'note') { noteW = px; noteCol = col; continue; }
@@ -2076,7 +2250,7 @@
     // Billing notes takes the rest of the screen (at least its own fitted width); the table never truncates a column.
     // v9j: explicit pixel widths for the notes column AND the table. iOS WebKit ignores min-width on a table-layout:fixed
     // table, so with only min-width the table stayed 100 % of the phone and the auto-width Billing notes column got 0 px
-    // (the skinny "⋯" column Jose saw on build 5). Chromium hid the bug.
+    // (the skinny "⋯" column the owner saw on build 5). Chromium hid the bug.
     const total = Math.ceil(Math.max(ww, sum + noteW)), nPx = Math.max(noteW, total - Math.ceil(sum));
     if (noteCol && noteCol.style.width !== nPx + 'px') { noteCol.style.width = nPx + 'px'; changed = true; }
     const tw = (Math.ceil(sum) + nPx) + 'px';
@@ -2084,15 +2258,15 @@
     if (t.style.width !== tw) { t.style.width = tw; changed = true; }
     memo.px.note = nPx;
     t._fit = memo;
-    const wraps = l => l[3] || l[2] > widths[l[1]] + 1;
+    const wraps = l => l[3] || l[2] > widths[l[1]] - 2;   // v9x: borderline text (within 2 px) is measured too; sub-pixel layout can wrap it
     // typing: no column changed → only the edited cell can need a new height
     if (only && !changed) {
-      if (onlyRec && only.tagName === 'TEXTAREA') { if (wraps(onlyRec)) autoHType(only); else if (only.style.height) only.style.height = ''; }
+      if (onlyRec && only.tagName === 'TEXTAREA') { if (wraps(onlyRec) && ww > 480) autoHType(only); else if (only.style.height) only.style.height = ''; }
       else if (only.tagName === 'TEXTAREA' && only.style.height && !only.value) only.style.height = '';
       return;
     }
     // wrapping cells: only those wider than their column (or with a line break) get a measured height; the rest go back to one line
-    const tall = longs.filter(wraps).map(l => l[0]), tallSet = new Set(tall);
+    const tall = (ww <= 480 ? [] : longs.filter(wraps)).map(l => l[0])   /* b11 phone: rows stay one line (half height); the full text shows in the cell editor / entry window */, tallSet = new Set(tall);
     for (const ta of t.querySelectorAll('tbody textarea.gc[style]')) if (!tallSet.has(ta) && ta.style.height) ta.style.height = '';
     for (const ta of tall) ta.style.height = '';                                       // writes
     const hs = tall.map(ta => [ta.scrollHeight, ta.clientHeight]);                     // one layout
@@ -2120,7 +2294,7 @@
     let d = fix(); if (!d) return; const w = c.closest('.gwrap'); if (w) w.scrollTop += d; d = fix(); if (d) window.scrollBy(0, d);
     gNavPos();
   }
-  function gNavPos() { const n = $('#gNav'), vv = window.visualViewport; if (!n || n.hidden) return; n.style.top = Math.round((vv ? vv.offsetTop + vv.height : innerHeight) - n.offsetHeight - 8) + 'px'; snackAvoidNav(); }
+  function gNavPos() { const n = $('#gNav'), vv = window.visualViewport; if (!n || n.hidden) return; const kb = vv && innerHeight - vv.height >= 120; n.style.top = Math.round((vv ? vv.offsetTop + vv.height : innerHeight) - n.offsetHeight - 8 - (kb ? 0 : TBH())) + 'px'; snackAvoidNav(); }
   function gNavShow(on) { const n = $('#gNav'); if (!n) return; n.hidden = !(on && COARSE()); gNavPos(); if (n.hidden) snackAvoidNav(); }
   if (window.visualViewport) { visualViewport.addEventListener('resize', () => { gNavPos(); kbSoon(); }); visualViewport.addEventListener('scroll', gNavPos); }
   // the explicit arrow buttons (toolbar ← → and the floating touch bar): same as Shift+Tab / Tab
@@ -2145,18 +2319,18 @@
   // ============================================================ v9g pick-and-return with MedBilling Fee Desk
   // ↗ / ⓘ in a Fee code(s) or Dx cell opens Fee Desk in "pick mode". Tapping a code there sends it straight back into the
   // same cell. Only the code, its kind and a random one-time token travel (URL / same-origin messages); never patient data.
-  // The pending pick (entry id, column, token, time: no patient data) lives in localStorage because the vault is encrypted
-  // and may be locked when the code comes back: then the code waits and is applied right after unlock.
+  // The pending pick (entry id, column, token, time: no patient data) lives in the device store (AES-GCM, device key; see
+  // vault.js) because the vault may be locked when the code comes back: then the code waits and is applied right after unlock.
   const PICK_KEY = 'bl.pick.v1', PICK_MSG = 'medbilling.pick.v1', PICK_TTL = 30 * 60000, FD_GRACE = 10 * 60000;
   const PICK_RE = /^[A-Z0-9][A-Z0-9.\-]{0,11}$/, TOK_RE = /^[a-f0-9]{32}$/;
   let fdSince = 0, pickBusy = false;
   const pickBC = (() => { try { return 'BroadcastChannel' in window ? new BroadcastChannel('medbilling-pick') : null; } catch (e) { return null; } })();
   function pickLoad() {
-    try { const p = JSON.parse(localStorage.getItem(PICK_KEY) || 'null'); if (!p || !TOK_RE.test(p.tok || '') || typeof p.id !== 'string') return null;
-      if (Date.now() - (p.pt || p.t) > PICK_TTL) { localStorage.removeItem(PICK_KEY); return null; } return p; } catch (e) { return null; }
+    const p = V.dev.get(PICK_KEY); if (!p || !TOK_RE.test(p.tok || '') || typeof p.id !== 'string') return null;
+    if (Date.now() - (p.pt || p.t) > PICK_TTL) { V.dev.remove(PICK_KEY); return null; } return p;
   }
-  function pickSave(p) { try { localStorage.setItem(PICK_KEY, JSON.stringify(p)); } catch (e) { /* storage blocked */ } }
-  function pickClear() { try { localStorage.removeItem(PICK_KEY); } catch (e) { /* ignore */ } }
+  function pickSave(p) { V.dev.set(PICK_KEY, p); }   // logs-billing: encrypted device store (was plaintext localStorage)
+  function pickClear() { V.dev.remove(PICK_KEY); }
   const pickTok = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
   function fdBack() { fdSince = 0; }
   function pickInFeeDesk(e, kind, at) {
@@ -2237,11 +2411,18 @@
     v.fee.forEach(c => { if (list0.concat(newFee).some(x => nc(x) === nc(c))) out.have.push(c); else newFee.push(c); });
     if (newFee.length) {
       await applyCell(e, 'fee', list0.concat(newFee).join(', '), R.encDay(e));
-      out.fee = (e.codes || []).slice(list0.length).map(c => c.c);
+      out.fee = (e.codes || []).filter(c => c.c && newFee.some(f => nc(f) === nc(c.c) || nc(c.k || '') === nc(f))).map(c => c.c);   // F5: by code, not by position
       // a Dx typed before there was any fee code moves onto the first fee code without one (as when typing in the Dx cell)
-      if (e.dx && e.codes.length) { const j = e.codes.findIndex(c => !c.dx); if (j >= 0 && !e.codes.some(c => c.dx && nc(c.dx) === nc(e.dx))) { e.codes[j] = Object.assign({}, e.codes[j], { dx: e.dx, dxd: dxDesc(e.dx) }); delete e.dx; } }
+      // F5 (Eng CEO): if that fee code comes with its own linked ICD, it gets the linked one, and the entry-level Dx stays as
+      // its own ICD-only line ({c:'', dx}) in front, so nothing is dropped or doubled
+      if (e.dx && e.codes.length) { const j = e.codes.findIndex(c => c.c && !c.dx); if (j >= 0 && !e.codes.some(c => c.dx && nc(c.dx) === nc(e.dx))) {
+        const linked = (v.dxFor || []).some((f, i) => f && v.dx[i] && (nc(f) === nc(e.codes[j].c) || nc(f) === nc(e.codes[j].k || '')) && nc(v.dx[i]) !== nc(e.dx));
+        if (linked) e.codes.unshift({ c: '', k: '', d: '', j: e.codes[j].j || (S.settings.prov || 'AB'), f: '', dx: e.dx, dxd: dxDesc(e.dx) });
+        else e.codes[j] = Object.assign({}, e.codes[j], { dx: e.dx, dxd: dxDesc(e.dx) });
+        delete e.dx; } }
     }
-    const codes = e.codes || [], posOf = f => f ? codes.findIndex(c => nc(c.c) === nc(f) || nc(c.k || '') === nc(f)) : -1;
+    const codes = e.codes || [], posOf = f => f ? codes.findIndex(c => c.c && (nc(c.c) === nc(f) || nc(c.k || '') === nc(f))) : -1;
+    const feePos = f => f ? codes.filter(c => c.c).findIndex(c => nc(c.c) === nc(f) || nc(c.k || '') === nc(f)) : -1;   // F5: position among real fee codes (an ICD-only line is not one)
     if (v.dx.length) {
       await loadIcd().catch(() => null);
       const dl = R.dxList(e);
@@ -2261,7 +2442,7 @@
       const m = { 1: R.normMods(e.mod1).split(', ').filter(Boolean), 2: R.normMods(e.mod2).split(', ').filter(Boolean) };
       v.mod.forEach((x, i) => {
         if (m[1].includes(x) || m[2].includes(x)) { out.have.push(x); return; }
-        const f = v.modFor[i] || (v.fee.length === 1 ? v.fee[0] : ''), n = target === 'mod1' ? 1 : target === 'mod2' ? 2 : posOf(f) > 0 ? 2 : 1;   // v9p: opened from a modifier cell → that cell
+        const f = v.modFor[i] || (v.fee.length === 1 ? v.fee[0] : ''), n = target === 'mod1' ? 1 : target === 'mod2' ? 2 : feePos(f) > 0 ? 2 : 1;   // v9p: opened from a modifier cell → that cell
         if (m[n].concat(x).join(', ').length > MOD_MAX) { out.skipped.push(x); return; }
         m[n].push(x); out['m' + n].push(x);
       });
@@ -2323,8 +2504,10 @@
     else if (sp.has('picked')) pickInbound(sp.get('picked'), sp.get('kind'), tok);
     return true;
   }
-  if (pickFromUrl(location.href)) { try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* ignore */ } }
-  pickReadMsg();
+  // logs-billing: the pending pick lives in the encrypted device store, so the return link is handled once that store is read
+  { const href0 = location.href, sp0 = new URL(href0).searchParams;
+    if (sp0.has('picked') || sp0.has('pickcancel') || sp0.has('pickv')) { try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* ignore */ } }
+    V.dev.load().then(() => { pickFromUrl(href0); pickReadMsg(); }); }
   // native app: Fee Desk returns with mblogs://pick?picked=…&kind=…&ctx=… (native.js passes it here; same validation)
   window.__mblPick = href => { let u; try { u = new URL(href); } catch (e) { return; } if (u.protocol !== 'mblogs:' || u.hostname !== 'pick') return; pickFromUrl(u.href); };
   window.__mblPickEnd = () => { if (fdSince) { picking = Math.max(0, picking - 1); fdSince = 0; lastAct = Date.now(); } };
@@ -2381,7 +2564,7 @@
   function render() {
     if (!S) return;
     renderOnsite(); renderToolbar(); renderTrackAgain();
-    renderToday();
+    renderClmBar(); renderToday(); if (tab === 'claims') renderClaims();
     $('#unitsNote').textContent = R.UNITS_NOTE;
     if (tab === 'history') { histStale = false; renderHistory(); } else histStale = true;   // v9g: History (1,000s of rows) is drawn when shown
     renderRetention(); renderPbar(); renderPeriodSettings(); renderPrem(); premCheck();
@@ -2459,9 +2642,71 @@
     if (render.day !== today()) { const was = render.day; render.day = today(); if (was && viewDay === was) viewDay = null; if (tab === 'today' && !$('#todayList').contains(document.activeElement)) render(); }
   }, 1000);
 
+  // ------------------------------------------------------------ Favourites tab (PROTOTYPE mbl-favourites-proto)
+  // Shared list (js/shared/favrow.js): Fee Desk's favourites on this origin, read-only. A tap inserts into the last row you
+  // touched on Today / History through the same v2 merge as a Fee Desk linked pick (pickApply2 -> pickMerge, F5 rules).
+  let favRowId = null, favData = null;
+  document.addEventListener('focusin', ev => { const tr = ev.target.closest && ev.target.closest('#todayList tr[data-id], #histList tr[data-id]'); if (tr) favRowId = tr.dataset.id; });
+  const favLoad = () => favData ? Promise.resolve(favData) : Promise.all([fetch('data/codes-AB.json').then(r => r.json()), fetch('data/icd9-AB.json').then(r => r.json()), loadFees()])
+    .then(([c, i]) => { const by = a => { const o = {}; a.forEach(x => { o[x[0]] = x; }); return o; }; return (favData = { codes: by(c.codes), icd: by(i.codes) }); });
+  // suite parity: the shared pane (same header, Manage, filter, Recent and backup row as Fee Desk); every change opens Fee Desk
+  const fdOpen = hash => { const w = window.open(FD + (hash || '#/fav'), 'mbfeedesk'); if (!w) location.href = FD + (hash || '#/fav'); };
+  function favPaneInit() {
+    const P = $('#favPane'), F = window.MBFavRow; if (!P || !F || P.dataset.ready) return !!(P && P.dataset.ready);
+    P.innerHTML = F.paneHtml({ tools: true, hint: true, filter: '', body: '<div id="favList" class="savedlist"></div>', rec: '<div id="favRecent" class="savedlist"></div>', note: 'Your favourites live in Fee Desk on this device; Logs shows the same list. Tap one to add it to the row you last touched.' });
+    P.dataset.ready = '1'; $('#favq').addEventListener('input', () => renderFav()); return true;
+  }
+  async function renderFav() {
+    const F = window.MBFavRow, P = $('#favPane'); if (!P) return;
+    if (!F) { P.innerHTML = '<p class="muted pad">Loading…</p>'; return; }
+    favPaneInit();
+    const d = await favLoad(), st = F.readFavs(window.localStorage);
+    const sk = String((S && S.settings && (S.settings.ewDef || {}).skill) || '').toUpperCase(), data = { codes: d.codes, icd: d.icd, fees: FEES, skill: sk };
+    $('#favList').innerHTML = F.listHtml(F.buildRows(st, data), $('#favq').value, st.groups);
+    // same rule as Fee Desk: the groups hint shows only with 3+ favourites and no groups yet
+    const fh = P.querySelector('.fghint'), ng = Array.isArray(st.groups) ? st.groups.length : Object.keys(st.groups || {}).length; if (fh) fh.hidden = !(ng === 0 && st.favs.length >= 3);
+    const rec = F.buildRows(st, data, st.recent.slice(0, 12));
+    $('#favRecent').innerHTML = rec.length ? rec.map(r => F.rowHtml(r, { recent: true })).join('') : '<p class="muted small pad savedempty">Codes you open in Fee Desk show up here.</p>';
+  }
+  document.addEventListener('mbfavrow', () => { if (tab === 'fav') renderFav(); });
+  window.addEventListener('storage', ev => { if (tab === 'fav' && (!ev.key || /^mb\./.test(ev.key))) renderFav(); });
+  $('#favPane').addEventListener('click', async ev => {
+    const F = window.MBFavRow, t = ev.target, k = el => el && (el.dataset.fav || el.dataset.favmenu || el.dataset.favlink);
+    let el;
+    if ((el = t.closest('.star'))) { fdOpen(F.fdActionHash('unstar', k(el))); return; }
+    if ((el = t.closest('.rowmenu'))) { fdOpen(F.fdActionHash('menu', k(el))); return; }
+    if ((el = t.closest('.ledit'))) { fdOpen(F.fdActionHash('link', k(el))); return; }
+    if (t.closest('#favManage')) { fdOpen('#/favmanage'); return; }
+    if (t.closest('#favNewGrp')) { fdOpen(F.fdActionHash('newgroup')); return; }
+    if (t.closest('#impSaved')) { fdOpen(F.fdActionHash('import')); return; }
+    if (t.closest('#expSaved')) { fdOpen(F.fdActionHash('export')); return; }
+    if (t.closest('#clearRecent')) { toast('Clear recent codes in Fee Desk', 2600); fdOpen('#/fav'); return; }
+    const b = t.closest('button.hit'); if (!b || !S) return;
+    const id = favRowId && S.encs.find(x => x.id === favRowId) ? favRowId : null;
+    if (!id) { toast('Tap a row on Today first, then pick a favourite', 3000); return; }
+    const v = F.pickPayload(b.dataset.insFee, b.dataset.insDx);
+    tab = 'today'; showTab();
+    await pickApply2({ id, picked: v, col: b.dataset.insFee ? 'fee' : 'dx', tab: 'today' });
+  });
+  // suite parity: shared Settings block (province and specialty come from Fee Desk storage, read-only here)
+  function renderSpSettings() {
+    const get = k => { try { return localStorage.getItem('mb.' + k) || ''; } catch (e) { return ''; } };
+    const PN = { AB: 'Alberta', BC: 'British Columbia', ON: 'Ontario', SK: 'Saskatchewan', MB: 'Manitoba', QC: 'Quebec', NS: 'Nova Scotia', NB: 'New Brunswick', NL: 'Newfoundland and Labrador', PE: 'Prince Edward Island' };
+    const j = get('jur') || 'AB', sk = get('skill');
+    const p = $('#spProv'), q = $('#spSkill'); if (!p) return;
+    p.innerHTML = `<option>${esc(PN[j] || j)}</option>`; q.innerHTML = `<option>${esc(sk || 'Not set')}</option>`;
+  }
+  if ($('#spSettings')) {
+    $('#spFdSet').addEventListener('click', () => fdOpen('#/settings'));
+    $('#spSizeGo').addEventListener('click', () => { const z = $('#dispSize'); if (z) { z.scrollIntoView({ block: 'center' }); z.focus(); } });
+    $('#spBackup').addEventListener('click', () => { const b = $('#expAll'); if (b) b.click(); else toast('Use Backups below', 2600); });
+  }
   // ------------------------------------------------------------ tabs
   function showTab() { $$('#tabs button').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); }); $$('main .panel').forEach(p => { p.hidden = p.id !== 'tab-' + tab; }); document.body.dataset.tab = tab; placeFoot();
     if (tab === 'history') histNow();
+    if (tab === 'fav') renderFav();
+    if (tab === 'data') renderSpSettings();
+    if (S && tab === 'claims') renderClaims(); if (S && tab === 'data') { seatUi(); clmLogRender(); }
     if (S) requestAnimationFrame(() => { if (tab === 'today') { sizeGrid(); if (fillRows() !== fillRows.last) renderToday(); } fitAll($('#tab-' + tab) || document); }); }
   $$('#tabs button').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; showTab(); if (tab === 'history' && !$('#rFrom').value) { $('#rTo').value = today(); const d = new Date(); d.setDate(d.getDate() - 6); $('#rFrom').value = R.dayKey(d.getTime()); } }));
   $('#homeLink').addEventListener('click', ev => { ev.preventDefault(); tab = 'today'; showTab(); window.scrollTo(0, 0); });
@@ -2520,6 +2765,47 @@
   }
   const dxCode = v => { v = norm(v); return /^[A-Z0-9][A-Z0-9.\-]{0,9}$/.test(v) ? v : ''; };   // stored value: a code only (free text allowed, words are search only)
   const dxDesc = v => (ICD && v && ICD.by.get(v)) || '';
+  // ------------------------------------------------------------ b11 code rows: Logs data -> Fee Desk's shared formatRow (js/shared/rowfmt.js, vendored byte-identical)
+  // Row order everywhere: code(·mods) [+N] short label · price · [ICD-9]. Full descriptions go in title/aria only. The word 'base' is never shown.
+  const codeDesc = c => { const o = codeCache.AB, x = o && c && o.byNorm.get(norm(c)); return x ? x.d : ''; };
+  const feePrice = (c, f) => f || (FEES && c && FEES[c] ? money(FEES[c][0]) : '');   // stored '$308.65 base' or the fee schedule's base rate; formatRow strips 'base'
+  function fmtRow(row) {
+    const F = window.MBRowFmt; if (F && F.formatRow) return F.formatRow(row);
+    // fallback until the module has loaded (module scripts run after this classic script): code first, no label
+    const code = String(row.code || '').trim(), icd = [].concat(row.icd || []).filter(Boolean), mods = [].concat(row.mods || []).filter(Boolean);
+    const price = String(row.price || '').replace(/\s*\(?\bbase\b\)?/gi, '').trim(), extra = row.extraCount ? '+' + row.extraCount : '', chips = icd.map(c => '[' + c + ']');
+    if (!code) return { kind: icd.length ? 'icd' : 'empty', codeText: '', extra: '', label: '', price: '', icd, icdLabel: '', chips, title: icd.length ? 'ICD-9 ' + icd.join('; ') : '', aria: '', text: chips.join(' ') };
+    const codeText = code + mods.map(m => '·' + m).join(''), title = codeText + (row.full ? ' ' + row.full : '');
+    return { kind: 'fee', code, mods, codeText, extra, label: '', price, icd, icdLabel: '', chips, title, aria: title, text: [codeText, extra, price, icd.length ? '[' + icd.join(', ') + ']' : ''].filter(Boolean).join(' ') };
+  }
+  // logsRow(lines, o): lines = encounter code lines [{c, d, f, dx, dxd}]; lead = first line with a fee code (never an ICD-only line),
+  // extraCount = further fee lines, icd = unique Dx across lines (lead's first). No fee line at all -> ICD-only row. o: {mods, dx: [extra Dx], noIcd}
+  function logsRow(lines, o = {}) {
+    lines = (lines || []).filter(Boolean);
+    const fee = lines.filter(l => l.c), lead = fee[0], icd = [], iF = [];
+    const addDx = (v, d) => { v = String(v || '').trim(); if (v && !icd.includes(v)) { icd.push(v); iF.push(d || dxDesc(v)); } };
+    if (!o.noIcd) { if (lead) addDx(lead.dx, lead.dxd); lines.forEach(l => addDx(l.dx, l.dxd)); (o.dx || []).forEach(v => addDx(v)); }
+    return fmtRow(lead ? { code: lead.c, full: lead.d || codeDesc(lead.c), price: feePrice(lead.c, lead.f), extraCount: fee.length - 1, mods: o.mods, icd, icdFull: iF } : { icd, icdFull: iF });
+  }
+  const icdRow = (c, d) => fmtRow({ icd: c, icdFull: d || dxDesc(c) });
+  // b11 S5: screen readers hear the price too (title stays the full description; formatRow's aria is shared and unchanged)
+  const rowAria = p => !p ? '' : (p.kind === 'fee' && p.price ? p.title + ' · ' + p.price : p.title);
+  // one row as spans (no interactive elements, so it can sit inside a button)
+  function rowHtml(p) {
+    if (!p || p.kind === 'empty') return '';
+    const icd = p.icd && p.icd.length ? `<span class="cri mono">${esc(p.kind === 'fee' ? '[' + p.icd.join(', ') + ']' : p.chips.join(' '))}</span>` : '';
+    return '<span class="crow">' + (p.kind === 'fee'
+      ? `<span class="crc mono">${esc(p.codeText)}</span>${p.extra ? `<span class="crx">${esc(p.extra)}</span>` : ''}${p.label ? `<span class="crl">${esc(p.label)}</span>` : ''}${p.price ? `<span class="crp">${esc(p.price)}</span>` : ''}${icd}`
+      : `${icd}${p.icdLabel ? `<span class="crl">${esc(p.icdLabel)}</span>` : ''}`) + '</span>';
+  }
+  // labels/prices need the fee list, ICD-9 list and AB code list; load once, then redraw the rows on screen
+  let rowDataP = null;
+  function rowData() {
+    if (!rowDataP) rowDataP = Promise.all([loadFees(), loadIcd().catch(() => {}), codesFor('AB').catch(() => {})]).then(rowsRefresh, rowsRefresh);
+    return rowDataP;
+  }
+  function rowsRefresh() { try { if (S && S.encs) renderTrackAgain(); } catch (e) {} try { if (cur && !$('#eView').hidden) renderSummary(); } catch (e) {} }
+  document.addEventListener('mbrowfmt', rowsRefresh);
   function fdDxHref(v) { v = dxCode(v); return v && ICD && ICD.by.has(v) ? FD + '#/medres/' + encodeURIComponent(v) : FD + '#/icd9'; }
   async function searchDx(q) {
     const o = await loadIcd(); q = q.trim(); if (!q) return [];
@@ -2561,8 +2847,8 @@
   function renderChips() {
     const box = $('#eDxRes'); if ($('#eCodes').contains(box)) $('#eCodeRes').after(box);   // keep the suggestion box out of the list being redrawn
     $('#eCodes').innerHTML = cur.codes.map((c, i) => `<div class="cdpair" data-i="${i}">
-      <div class="chip"><div class="cl1"><b>${esc(c.c)}</b><span class="cf">${esc(c.f || '')}</span></div><span class="cd" title="${esc(c.d)}">${esc(c.d || '')}</span>${fdA(fdCodeHref(c.k || c.c, c.j), `Look up ${c.c} in MedBilling Fee Desk (opens in a new tab)`)}<button type="button" class="x" data-i="${i}" aria-label="Remove code ${esc(c.c)}">✕</button></div>
-      <div class="dxcell"><input class="dxin" data-i="${i}" type="search" maxlength="40" value="${esc(c.dx || '')}" placeholder="ICD-9 code or words" aria-label="Diagnostic code (ICD-9) for ${esc(c.c)}" autocomplete="off" autocapitalize="characters" enterkeyhint="done"><span class="dxd" title="${esc(c.dxd || '')}">${esc(c.dxd || '')}</span>${fdA(fdDxHref(c.dx), `Look up diagnostic code ${c.dx || ''} in MedBilling Fee Desk (opens in a new tab)`)}</div></div>`).join('');
+      <div class="chip"><div class="cl1" title="${esc(logsRow([c], { noIcd: 1 }).title)}" role="text" aria-label="${esc(rowAria(logsRow([c], { noIcd: 1 })))}">${rowHtml(logsRow([c], { noIcd: 1 }))}</div><span class="cd" title="${esc(c.d)}">${esc(c.d || '')}</span>${fdA(fdCodeHref(c.k || c.c, c.j), `Look up ${c.c} in MedBilling Fee Desk (opens in a new tab)`)}<button type="button" class="x" data-i="${i}" aria-label="Remove code ${esc(c.c)}">✕</button></div>
+      <div class="dxcell"><input class="dxin" data-i="${i}" type="search" maxlength="40" value="${esc(c.dx || '')}" placeholder="ICD-9 code or words" aria-label="Diagnosis (ICD-9) for ${esc(c.c)}" autocomplete="off" autocapitalize="characters" enterkeyhint="done"><span class="dxd" title="${esc(c.dxd || '')}">${esc(c.dxd || '')}</span>${fdA(fdDxHref(c.dx), `Look up diagnostic code ${c.dx || ''} in MedBilling Fee Desk (opens in a new tab)`)}</div></div>`).join('');
     $$('#eCodes .x').forEach(b => b.onclick = () => { cur.codes.splice(+b.dataset.i, 1); $('#eDxRes').innerHTML = ''; renderChips(); });
     $$('#eCodes .dxin').forEach(inp => bindDx(inp));
   }
@@ -2580,13 +2866,13 @@
     if (!q.trim()) { box.innerHTML = ''; return; }
     const hits = await searchDx(q); if (seq !== dxSeq || !cur) return;
     const typed = dxCode(q);
-    let h = hits.map((c, i) => `<button type="button" class="chit" data-i="${i}"><span class="cc">${esc(c.c)}</span><span class="cd">${esc(c.d)}</span><span class="cf"></span></button>`).join('');
+    let h = hits.map((c, i) => { const p = icdRow(c.c, c.d); return `<button type="button" class="chit crchit" data-i="${i}" title="${esc(p.title)}" aria-label="${esc(rowAria(p))}">${rowHtml(p)}</button>`; }).join('');
     if (typed && !hits.some(c => c.c === typed)) h += `<button type="button" class="chit" data-typed="1"><span class="cc">${esc(typed)}</span><span class="cd">Use as typed (not in the Alberta ICD-9 list)</span><span class="cf"></span></button>`;
     if (!h) h = '<p class="small muted">No matching ICD-9 codes. Type the code, or use Look up in Fee Desk.</p>';
     box.innerHTML = `<p class="dxh small muted">ICD-9 suggestions (Alberta Health list, via Fee Desk)</p>` + h;
     box.querySelectorAll('.chit').forEach(b => b.onclick = () => {
       const v = b.dataset.typed ? typed : hits[+b.dataset.i].c; inp.value = v; dxSync(inp); box.innerHTML = '';
-      if (inp.id !== 'eDxQ') renderChips(); toast(`Diagnostic code ${v}`);
+      if (inp.id !== 'eDxQ') renderChips(); toast(`Diagnosis (ICD-9) ${v}`);
     });
   }
   function bindDx(inp) {
@@ -2604,7 +2890,7 @@
     if (!q.trim()) { $('#eCodeRes').innerHTML = ''; syncCodeLink(); return; }
     const hits = await searchCodes(q, prov); if (seq !== searchSeq) return;
     syncCodeLink();
-    let h = hits.map((c, i) => `<button type="button" class="chit" data-i="${i}"><span class="cc">${esc(c.c)}</span><span class="cd">${esc(c.d)}</span><span class="cf">${esc(c.f)}</span></button>`).join('');
+    let h = hits.map((c, i) => { const p = logsRow([{ c: c.c, d: c.d, f: c.f }]); return `<button type="button" class="chit crchit" data-i="${i}" title="${esc(p.title)}" aria-label="${esc(rowAria(p))}">${rowHtml(p)}</button>`; }).join('');
     const typed = q.trim().toUpperCase(), pv = PROVS.find(p => p.id === prov);
     if (/^[A-Z0-9.\-]{2,12}$/.test(typed) && !hits.some(c => c.c.toUpperCase() === typed)) h += `<button type="button" class="chit" data-typed="1"><span class="cc">${esc(typed)}</span><span class="cd">${pv && pv.held ? 'Add as typed' : `Add as typed (not found in the ${esc(prov)} list)`}</span><span class="cf"></span></button>`;
     if (pv && pv.held) h = `<p class="small muted heldmsg">${esc(HELD_MSG(pv))}</p>` + h;
@@ -2743,7 +3029,7 @@
     rows.push(['Setting', esc([R.SET[e.setting], k === 'enc' && e.type, e.facility && e.facility.n].filter(Boolean).join(' · ')) || '<span class="muted">–</span>']);
     if (k !== 'shift') {
       const cs = e.codes || [];
-      rows.push(['Codes', cs.length ? cs.map(c => `<span class="sc"><b>${esc(c.c)}</b>${c.dx ? ` <span class="dxc">Dx ${esc(c.dx)}</span>` : ''}${c.d ? ` <span class="muted">${esc(c.d.length > 60 ? c.d.slice(0, 60) + '…' : c.d)}</span>` : ''}</span>`).join('') + (e.dx ? `<span class="sc"><span class="dxc">Dx ${esc(e.dx)}</span></span>` : '') + dxxHtml(e) : (e.dx || R.dxExtra(e).length ? (e.dx ? `<span class="dxc">Dx ${esc(e.dx)}</span>` : '') + dxxHtml(e) : '<span class="muted">None yet. Tap Edit to add fee and diagnostic codes.</span>')]);
+      rows.push(['Codes', cs.length ? cs.map(c => { const p = c.c ? logsRow([c], { mods: cs.filter(x => x.c).length === 1 ? [1, 2].map(n => modOf(e, n)).filter(Boolean) : null }) : icdRow(c.dx, c.dxd); return p.kind === 'empty' ? '' : `<span class="sc" title="${esc(p.title)}" aria-label="${esc(rowAria(p))}" role="text">${rowHtml(p)}</span>`; }).join('') + (e.dx ? scIcd(e.dx) : '') + dxxHtml(e) : (e.dx || R.dxExtra(e).length ? (e.dx ? `<span class="dxc">Dx ${esc(e.dx)}</span>` : '') + dxxHtml(e) : '<span class="muted">None yet. Tap Edit to add fee and diagnostic codes.</span>')]);
       if (e.refNm || e.refId) rows.push(['Referring provider', esc(refTxt(e))]);   // v9r
       if (facNoOf(e) || fcenOf(e)) rows.push(['Facility # · Functional centre', [facNoOf(e) && `<span class="sc"><b>${esc(facNoOf(e))}</b>${R.facNmTxt(e) ? ` <span class="muted">${esc(R.facNmTxt(e))}</span>` : ''}</span>`, fcenOf(e) && `<span class="sc"><b>${esc(fcenOf(e))}</b>${R.fcenName(fcenOf(e)) ? ` <span class="muted">${esc(R.fcenName(fcenOf(e)))}</span>` : ''}</span>`].filter(Boolean).join('')]);   // v9o
       if (modOf(e, 1) || modOf(e, 2)) rows.push(['Modifiers', [1, 2].filter(n => modOf(e, n)).map(n => `<span class="sc"><span class="muted">${n}:</span> <b>${esc(modOf(e, n))}</b></span>`).join('')]);
@@ -3308,12 +3594,94 @@
     }
     const have = new Set((await V.photoIds()).map(p => p.id));
     for (const p of data.photos || []) if (!have.has(p.id)) { await V.restorePhoto(p); photos++; }
+    if (data.fdfav && window.MBSuite) { try { window.MBSuite.favRestore(window.localStorage, data.fdfav); } catch (e) { /* favourites are optional */ } }
     await migrateNotes(); premBase = null; undoReset(); render(); toast(`Imported: ${added} new, ${updated} updated, ${photos} photo(s)`, 3500);
   });
+  // move-prep: Export my data / Import my data (shared js/shared/move.js, same wording and controls as Fee Desk). This extends the
+  // encrypted backup above: the file carries that same encrypted payload (encounters, photos, settings, audit log, Fee Desk
+  // favourites; AES-256, the passcode is needed to open it) plus every Fee Desk 'mb.' localStorage key Logs reads (favourites,
+  // province, specialty). IndexedDB 'bl-vault' (meta, enc, photo, audit) is inside the encrypted payload. Not exported, because they
+  // are tied to this device: 'bl-device' (device key, failed-unlock counter, pending pick) and 'bl-backup-loc' (backup folder).
+  if (window.MBMove) {
+    const MV = window.MBMove, keep = k => /^mb\./.test(k) && !/^mb\.(pick|picktray|move)\./.test(k);
+    const favN = snap => { try { const a = JSON.parse((snap || {})['mb.favs'] || '[]'); return Array.isArray(a) ? a.length : 0; } catch (e) { return 0; } };
+    const ROWS = [['encounters', 'Entries (encounters, calls, arrivals)'], ['photos', 'Photos'], ['audit', 'Audit log records (archive in the file, not restored)'], ['favourites', 'Favourite codes'], ['settings', 'Settings'], ['keys', 'Fee Desk items (favourites, province, specialty)']];
+    const needUnlock = () => { if (!S) throw new Error('Unlock MedBilling Logs first, then try again.'); };
+    MV.init({ appId: 'medbilling-logs', appVersion: 'bl-v13-20261023-url-switch-d', settingsMount: '#spSettings', bannerMount: '#main', toast, beforePick: pickStart, accept: '.json,.mblbackup,application/json,application/octet-stream',
+      exportData: async () => {
+        needUnlock(); let b = null;
+        const v = await ask({ title: 'Export my data', text: MV.T.passExport + ' Keep the file somewhere safe. The audit log goes in the file as an archive; it is not restored on import.', ok: 'Export', fields: [{ id: 'p', label: 'Passcode' }],
+          check: async v => { b = await V.backup(v.p).catch(() => null); return b ? '' : 'Wrong passcode.'; } });
+        if (!v || !b) return null;
+        const snap = MV.lsSnapshot(localStorage, keep), ph = await V.photoIds().catch(() => []), aud = await V.loadAudit().catch(() => []);
+        S.settings.lastBackup = Date.now(); S.settings.bkSnooze = 0; await saveSettings(); renderRetention(); checkBackupDue();
+        return { data: { vault: b, localStorage: snap },
+          counts: { encounters: S.encs.length, photos: ph.length, audit: aud.length, favourites: favN(snap), settings: Object.keys(S.settings || {}).length, keys: Object.keys(snap).length },
+          inventory: { localStorage: Object.keys(snap), indexedDB: ['bl-vault: meta (settings, audit head), enc, photo, audit (inside data.vault, encrypted)'], notExported: ['bl-device (device key, failed-unlock counter, pending pick)', 'bl-backup-loc (automatic backup folder)', 'sessionStorage', 'offline cache (app files)'] } };
+      },
+      // b: older Logs backup files (Settings → Back up: {app:'MedBilling Logs', kind:'encrypted-backup'}) are accepted too;
+      // they go through the same passcode step and preview. They hold no Fee Desk localStorage beyond what the vault kept.
+      readLegacy: async o => { if (!o || o.app !== 'MedBilling Logs' || o.kind !== 'encrypted-backup' || !o.ct) return false;
+        const when = o.created || o.exported ? String(o.created || o.exported).slice(0, 10) : '';
+        const p = await this_readImport({ app: 'medbilling-logs', data: { vault: o, localStorage: {} }, legacyNote: MV.T.legacy(o.version, true) });
+        if (p) p.from = `Older Logs backup file${when ? ' from ' + when : ''}`; return p; },
+      readImport: async env => this_readImport(env) });
+    async function this_readImport(env) {
+        needUnlock(); const vb = env.data.vault, snapIn = env.data.localStorage || {};
+        if (!vb || vb.kind !== 'encrypted-backup' || !vb.ct || typeof snapIn !== 'object' || Array.isArray(snapIn)) throw new MV.MoveError('bad', MV.ERR.bad);
+        let data = null;
+        const v = await ask({ title: 'Import my data', text: MV.T.passImport, ok: 'Open file', fields: [{ id: 'p', label: 'Passcode used when this file was exported' }],
+          check: async v => { data = await V.openBackup(vb, v.p).catch(() => null); return data ? '' : MV.T.passWrong; } });
+        if (!v || !data) return null;
+        if (Object.values(snapIn).some(x => typeof x !== 'string')) throw new MV.MoveError('bad', MV.ERR.bad);   // d: a damaged stored value is rejected, same message as Fee Desk
+        const snap = {}; Object.keys(snapIn).forEach(k => { if (keep(k) && typeof snapIn[k] === 'string') snap[k] = snapIn[k]; });
+        if (data.fdfav && typeof data.fdfav === 'object') Object.keys(data.fdfav).forEach(k => { if (!(k in snap) && keep(k) && typeof data.fdfav[k] === 'string') snap[k] = data.fdfav[k]; });
+        const encs = data.encounters || [], photos = data.photos || [];
+        const counts = { encounters: encs.length, photos: photos.length, audit: (data.audit || []).length, favourites: favN(snap), settings: Object.keys(data.settings || {}).length, keys: Object.keys(snap).length };
+        return { counts, rows: ROWS, notes: [env.legacyNote, MV.T.passOk, counts.audit ? MV.T.audit : ''], apply: async mode => {
+          let added = 0, updated = 0, removed = 0, nph = 0;
+          if (mode === 'replace') {
+            // c: Replace is all-or-nothing. 1) check everything in the file, 2) build the new state in memory (entries, settings,
+            // photos, audit records), 3) swap localStorage (rolled back on any error), 4) write IndexedDB in ONE transaction
+            // (Vault.replaceAll); if that fails, localStorage is put back too and nothing on this device changes.
+            const bad = () => new MV.MoveError('bad', MV.ERR.bad);
+            if (!Array.isArray(encs) || encs.some(e => !e || typeof e !== 'object' || typeof e.id !== 'string' || !e.id)) throw bad();
+            if (!Array.isArray(photos) || photos.some(p => !p || typeof p.id !== 'string' || typeof p.b !== 'string')) throw bad();
+            if (new Set(encs.map(e => e.id)).size !== encs.length) throw bad();
+            if (data.settings != null && (typeof data.settings !== 'object' || Array.isArray(data.settings))) throw bad();
+            const ids = new Set(encs.map(e => e.id)), now = Date.now(), audit = [], next = [], gone = S.encs.filter(e => !ids.has(e.id));
+            const delPhoto = [];
+            for (const e of gone) { const ph = e.photos || []; ph.forEach(p => delPhoto.push(p)); removed++;
+              audit.push({ action: 'delete', eid: e.id, kind: kindOf(e), before: clone(e), after: null, note: ['Removed by Import my data (replace)', ph.length ? `${ph.length} photo(s) removed with the entry` : ''].filter(Boolean).join('. ') }); }
+            for (const e0 of encs) { const e = clone(e0), ex = S.encs.find(x => x.id === e.id) || null;
+              e.kind = kindOf(e); e.updated = now; let note = 'Replaced from Import my data'; const cg = claimGuard(ex ? clone(ex) : null, e, 'import'); if (cg) note += '. ' + cg;
+              next.push(e); audit.push({ action: 'import', eid: e.id, kind: e.kind, before: ex ? clone(ex) : null, after: clone(e), note }); if (ex) updated++; else added++; }
+            const dev = {}; Object.keys(S.settings || {}).forEach(k => { if (/^ab/.test(k) || k === 'lastBackup') dev[k] = S.settings[k]; });   // automatic-backup set-up stays with this device
+            const settings = Object.assign({}, data.settings || {}, dev);
+            const goneSet = new Set(delPhoto), have = new Set((await V.photoIds()).map(p => p.id).filter(id => !goneSet.has(id)));
+            const putPhoto = photos.filter(p => !have.has(p.id)); nph = putPhoto.length;
+            const lsBefore = MV.lsSnapshot(localStorage, keep);
+            MV.lsApply(localStorage, snap, 'replace', keep);   // throws (and restores localStorage itself) if a write fails
+            try { await V.replaceAll({ delEnc: gone.map(e => e.id), delPhoto, putEnc: next, putPhoto, settings, audit }); }
+            catch (err) { MV.lsRestore(localStorage, keep, lsBefore); throw new MV.MoveError('failed', MV.ERR.failed); }
+            S.encs = next; S.settings = settings;
+          } else {
+            for (const e of encs) { const ex = S.encs.find(x => x.id === e.id);
+              if (!ex) { await saveEnc(clone(e), 'import', 'Added from Import my data'); added++; } else if ((e.updated || 0) > (ex.updated || 0)) { await saveEnc(clone(e), 'import', 'Updated from a newer copy in Import my data'); updated++; } }
+            const s0 = S.settings || {}; let ch = false; Object.keys(data.settings || {}).forEach(k => { if (!(k in s0) && !/^ab/.test(k)) { s0[k] = data.settings[k]; ch = true; } }); if (ch) { S.settings = s0; await saveSettings(); }
+            const have = new Set((await V.photoIds()).map(p => p.id));
+            for (const p of photos) if (!have.has(p.id)) { await V.restorePhoto(p); nph++; }
+            MV.lsApply(localStorage, snap, mode, keep);
+          }
+          await migrateNotes(); premBase = null; undoReset(); renderSpSettings(); render();
+          return { message: mode === 'replace' ? `Imported (replace): ${added} new, ${updated} replaced, ${removed} removed, ${nph} photo(s)` : `Imported (merge): ${added} new, ${updated} updated, ${nph} photo(s)` };
+        } };
+    }
+  }
   $('#wipe').onclick = async () => {
     const v = await ask({ title: 'Delete all data', text: 'This erases every encounter, arrival/departure, call-back, photo, the whole audit log, all settings and the passcode from this device. It cannot be undone and the developer cannot recover anything. Check your retention obligations and make an encrypted backup first. Enter your passcode and type DELETE ALL to confirm.', ok: 'Delete everything', danger: true, fields: [{ id: 'p', label: 'Passcode' }, { id: 'c', label: 'Type DELETE ALL', type: 'text' }],
       check: async v => v.c.trim().toUpperCase() !== 'DELETE ALL' ? 'Type DELETE ALL to confirm.' : ((await V.verify(v.p)) ? '' : 'Wrong passcode.') });
-    if (!v) return; S = null; if (EU) await EU.disableAll().catch(() => {}); await V.wipe(); await abForget(); localStorage.removeItem(failKey); lockNow('All data deleted.'); showLock('All data deleted. Create a new passcode to start again.');
+    if (!v) return; S = null; if (EU) await EU.disableAll().catch(() => {}); await V.wipe(); await V.dev.wipe(); await abForget(); V.dev.remove(failKey); lockNow('All data deleted.'); showLock('All data deleted. Create a new passcode to start again.');
   };
 
   // ============================================================ v8 backups: automatic (folder / native) or reminder + share
@@ -3345,7 +3713,7 @@
     return m.slice(0, 200);
   };
   const abErr = (code, m) => Object.assign(new Error(m), { code });
-  const stampOf = ts => { const d = new Date(ts); return `${R.dayKey(ts)}_${R.pad(d.getHours())}${R.pad(d.getMinutes())}${R.pad(d.getSeconds())}`; };
+  const stampOf = ts => { const w = R.edm(ts); return `${w.key}_${R.pad(w.h)}${R.pad(w.mi)}${R.pad(w.s)}`; };   // Alberta time, same as the day key
   const blobB64 = async b => { const u = new Uint8Array(await b.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
   // password strength (rough entropy estimate): 12+ characters and about 60 bits or more counts as strong enough
   function pwStrength(p) {
@@ -3723,7 +4091,7 @@
     const d = curDay(), cnt = premFor([d]), hol = R.holidayName(d), tc = premTime(d);
     box.hidden = false;
     box.innerHTML = `<span class="pl">03.01AA${hol ? ' · ' + esc(hol) : ''}</span>` + R.premDayCodes(d).map(c => { const n = cnt.get(d + '|' + c) || 0, mx = premMax(c);
-      return `<span class="pi ${premLvl(n, mx)}" data-pc="${c}" title="${esc(`${R.PREM[c].name}, ${R.PREM[c].when} (surcharge ${R.PREM[c].surc}): ${n} of ${mx} units entered${premMine(c) ? ' (limit set by you)' : ''}; ${tc.get(d + '|' + c) || 0} units of logged time in this window`)}">${c} <b>${n}</b>/${mx}${premMine(c) ? '*' : ''}</span>`; }).join('');
+      return SPUI.chip({ cls: ('pi sm ' + premLvl(n, mx)).trim(), attrs: { 'data-pc': c, title: `${R.PREM[c].name}, ${R.PREM[c].when} (surcharge ${R.PREM[c].surc}): ${n} of ${mx} units entered${premMine(c) ? ' (limit set by you)' : ''}; ${tc.get(d + '|' + c) || 0} units of logged time in this window` }, html: `<span class="pt">${c} <b>${n}</b>/${mx}${premMine(c) ? '*' : ''}</span>` }); }).join('');   /* v1b M14: the shared chip */
     box.setAttribute('aria-label', `After-hours time premium, ${R.fmtDay(d)}: ` + R.premDayCodes(d).map(c => `${c} ${cnt.get(d + '|' + c) || 0} of ${premMax(c)} units`).join(', ') + '. Opens the details');
   }
   function premCheck() {
@@ -3823,7 +4191,7 @@
   // ---- 2. track again + favourite code sets: copies setting, facility, fee codes and ICD-9 only (never label, initials, chart, notes or photos)
   const comboOf = e => ({ set: e.setting || e.set || 'H', fac: e.facility || e.fac ? (f => ({ n: f.n, z: f.z || '', set: f.set, custom: !!f.custom }))(e.facility || e.fac) : null, codes: (e.codes || []).map(c => ({ j: c.j, c: c.c, d: c.d, f: c.f, k: c.k, dx: c.dx, dxd: c.dxd })) });
   const comboKey = c => [c.set, c.fac ? c.fac.n : '', c.codes.map(x => x.c + '|' + (x.dx || '')).join(',')].join('#');
-  const comboLbl = c => { const f = c.codes[0]; return f ? f.c + (f.dx ? ' · ' + f.dx : '') + (c.codes.length > 1 ? ` +${c.codes.length - 1}` : '') : '(no code)'; };
+  const comboLbl = c => { const p = logsRow(c.codes); return p.kind === 'empty' ? '(no code)' : p.text; };   // b11: leads with the first fee code (was '· 218 +1' when line 1 was Dx-only)
   function suggestions() {
     const favs = (S.settings.favSets || []).map(f => ({ fav: true, c: f })), fk = new Set(favs.map(f => comboKey(f.c))), since = Date.now() - 60 * 86400000, m = new Map();
     for (const e of S.encs) { if (kindOf(e) !== 'enc' || !(e.codes || []).length || R.startOf(e) < since) continue; const c = comboOf(e), k = comboKey(c); if (fk.has(k)) continue; const x = m.get(k) || { n: 0, last: 0, c }; x.n++; x.last = Math.max(x.last, R.startOf(e)); m.set(k, x); }
@@ -3832,7 +4200,9 @@
   }
   function renderTrackAgain() {
     const box = $('#trackAgain'), list = suggestions(); box.hidden = !list.length; if (!list.length) { box.innerHTML = ''; return; }
-    box.innerHTML = `<span class="tal">Track again</span>` + list.map((x, i) => `<span class="tchip${x.fav ? ' fav' : ''}"><button type="button" class="tgo" data-i="${i}" title="Start a timer with ${esc(x.c.codes.map(c => c.c + (c.dx ? ' (' + c.dx + ')' : '')).join(', '))}${x.c.fac ? ' at ' + esc(x.c.fac.n) : ''}">${esc(comboLbl(x.c))}<small>${x.c.set}</small></button><button type="button" class="tstar" data-i="${i}" aria-label="${x.fav ? 'Remove from' : 'Save to'} favourite code sets">${x.fav ? '★' : '☆'}</button></span>`).join('');
+    rowData();
+    box.innerHTML = `<span class="tal">Track again</span>` + list.map((x, i) => { const p = logsRow(x.c.codes), tip = `Start a timer with ${x.c.codes.length ? x.c.codes.map(c => c.c ? rowAria(logsRow([c])) : icdRow(c.dx, c.dxd).title).join('; ') : 'no codes'}${x.c.fac ? ' at ' + x.c.fac.n : ''}`;
+      return `<span class="tchip${x.fav ? ' fav' : ''}"><button type="button" class="tgo" data-i="${i}" title="${esc(tip)}" aria-label="${esc(tip)}">${p.kind === 'empty' ? '<span class="crow"><span class="crl">(no code)</span></span>' : rowHtml(p)}<small>${x.c.set}</small></button><button type="button" class="tstar" data-i="${i}" aria-label="${x.fav ? 'Remove from' : 'Save to'} favourite code sets">${x.fav ? '★' : '☆'}</button></span>`; }).join('');
     box.querySelectorAll('.tgo').forEach(b => b.onclick = () => startFrom(list[+b.dataset.i].c));
     box.querySelectorAll('.tstar').forEach(b => b.onclick = () => toggleFav(list[+b.dataset.i].c));
   }
@@ -3971,9 +4341,302 @@
     const td = today(), s2 = new Set(S.settings.holExtra || []); $('#holToday').checked ? s2.add(td) : s2.delete(td); S.settings.holExtra = [...s2].sort();
     await holChanged(`${td} ${$('#holToday').checked ? 'marked as a statutory holiday' : 'no longer marked as a holiday'}`);
   };
+  // ============================================================ logs-billing (the owner, 2026-10-15/16): Approve/Submit on each billing
+  // item, H-Link batch timing (approvals close Thu 4:00 PM, H-Link cutoff Thu 4:30 PM, pay the following Friday), staff seats with
+  // per-provider View / Submit permissions (default off, audit-logged), the Thursday report, N for a new entry, Med Access Tab
+  // order in the entry window, and a searchable Referring provider list with favourites. TEST BUILD: H-Link is not connected;
+  // "Queued for H-Link" only marks the claim. Everything is kept in the encrypted vault (entries, settings, audit log).
+  const C = window.MBClaims, holN = k => R.holidayName(k);
+  const ownerName = () => (S && S.settings.ewDef && S.settings.ewDef.prov) || 'Provider (this device)';
+  const seats = () => C.seatsOf(S.settings, ownerName());
+  const seatId = () => seats().active;
+  const seatName = id => { const x = seats(), p = x.providers.concat(x.staff).find(y => y.id === id); return p ? p.name : 'Unknown seat'; };
+  const isStaffSeat = () => !C.isProvider(seats(), seatId());
+  function workProv() { const x = seats(), id = x.active; if (C.isProvider(x, id)) return id; const p = x.providers.find(q => C.can(x, id, q.id, 'view')); return p ? p.id : null; }
+  const canSee = e => kindOf(e) === 'shift' || C.can(seats(), seatId(), C.provOfEntry(e, seats()), 'view');
+  const canSubmit = e => C.can(seats(), seatId(), C.provOfEntry(e, seats()), 'submit');
+  function seatSplit() {   // a staff seat only works with the billings it may view; the rest are kept out of every list, report and search (role switch on one device, not a separate login)
+    const all = S.encs.concat(S.hidden || []); S.encs = all.filter(canSee); S.hidden = all.filter(e => !canSee(e));
+  }
+  function seatsSave(x) { S.settings.seats = { providers: x.providers, staff: x.staff, perm: x.perm, active: x.active }; return saveSettings(); }
+  const billSig = e => JSON.stringify([e.codes || [], e.mod1 || '', e.mod2 || '', e.modU || {}, e.dx || '', e.dxx || [], ptMrn(e) || '', ptName(e) || '', e.refNm || '', e.refId || '', facNoOf(e) || '', fcenOf(e) || '', e.segs || [], e.setting || '', e.ma || {}]);
+  // called by saveEnc: a new entry belongs to the provider you work for; billing changes after approval withdraw it
+  function claimGuard(before, e, action) {
+    if (!before && action === 'create' && !e.prv && kindOf(e) !== 'shift') e.prv = workProv() || seats().providers[0].id;
+    if (before && C.queued(before) && action !== 'approve' && action !== 'withdraw' && C.queued(e) && billSig(before) !== billSig(e)) {
+      delete e.claim; setTimeout(() => toast('Billing details changed after Approve/Submit, so the approval was withdrawn. Approve/Submit again when ready.', 5000), 0);
+      return 'Approval withdrawn automatically: billing details changed after Approve/Submit';
+    }
+    return '';
+  }
+  function clmCell(e) {
+    if (C.queued(e)) {
+      const c = e.claim, b = C.batchOf(c.batch, holN, c.rolled), warn = c.rolled || b.flags.length;
+      return `<button type="button" class="clmq${warn ? ' warn' : ''}" data-a="clm" tabindex="-1" title="${esc(C.noteFor(b))}" aria-label="${esc('Queued for H-Link. ' + C.noteFor(b))}"><b>✓ Queued for H-Link</b><small>${esc(C.shortDay(c.batch).replace(/^\w+ /, ''))} batch · pay ${esc(C.shortDay(b.pay).replace(/^\w+ /, ''))}${warn ? ' ⚠' : ''}</small></button>`;
+    }
+    const ok = canSubmit(e), miss = C.missingOf(e);
+    const t = !ok ? 'You do not have permission to submit this provider’s billings' : miss.length ? `Missing: ${miss.join(', ')}. Add them, then Approve/Submit` : 'Approve this claim and queue it for the next H-Link batch (counts as provider approval)';
+    return `<button type="button" class="apv${miss.length || !ok ? ' soft' : ''}" data-a="apv" tabindex="-1"${ok ? '' : ' aria-disabled="true"'} title="${esc(t)}" aria-label="Approve/Submit. ${esc(t)}">Approve/<wbr>Submit</button>`;
+  }
+  async function approveClaim(id, from) {
+    const e1 = S.encs.find(x => x.id === id); if (!e1) return false;
+    if (!canSubmit(e1)) { toast('You do not have permission to submit this provider’s billings', 3500); return false; }
+    if (C.queued(e1)) { claimInfo(e1); return false; }
+    const miss = C.missingOf(e1); if (miss.length) { toast(`Can’t approve yet. Add: ${miss.join(', ')}`, 4000); return false; }
+    const now = Date.now(), b = C.batchFor(now, holN), sid = seatId(), prov = C.provOfEntry(e1, seats()), e = clone(e1);
+    e.claim = { st: 'queued', at: now, by: sid, byName: seatName(sid), prov, onBehalf: sid !== prov, batch: b.batch, pay: b.pay, rolled: b.rolled };
+    await saveEnc(e, 'approve', `Approve/Submit${from ? ' (' + from + ')' : ''} by ${seatName(sid)}${sid !== prov ? ' for ' + seatName(prov) : ''}. ${C.noteFor(b)} Test build: H-Link not connected, nothing sent.`);
+    render(); if (tab === 'claims') renderClaims(); clmLogRender();
+    snack(b.rolled ? `After the Thursday ${C.APPROVE_TXT} cutoff: queued for the batch of ${b.weekTxt}. Expected pay ${b.payTxt}.` : `Queued for H-Link: ${C.shortDay(b.batch)} batch. Expected pay ${b.payTxt}.`, () => withdrawClaim(e.id, 'Undo'), 8000, true, 'Undo');
+    return true;
+  }
+  async function withdrawClaim(id, why) {
+    const e1 = S.encs.find(x => x.id === id); if (!e1 || !C.queued(e1)) return;
+    if (!canSubmit(e1)) return toast('You do not have permission to change this provider’s billings', 3500);
+    const e = clone(e1); delete e.claim;
+    await saveEnc(e, 'withdraw', `Approval withdrawn${why ? ' (' + why + ')' : ''} by ${seatName(seatId())}`); render(); if (tab === 'claims') renderClaims(); clmLogRender(); toast('Approval withdrawn');
+  }
+  function claimInfo(e) {
+    const c = e.claim, b = C.batchOf(c.batch, holN, c.rolled), open = Date.now() < b.closeAt, d = $('#clmDlg');
+    $('#clmDlgT').textContent = displayWho(e) || 'Claim';
+    $('#clmDlgB').innerHTML = `<p><b>Queued for H-Link</b> <span class="draft">Test build · H-Link not connected · nothing is sent</span></p>`
+      + `<p class="small">${esc(C.noteFor(b))}</p>`
+      + `<p class="small muted">Approved ${esc(R.tsTxt(c.at))} by ${esc(c.byName || seatName(c.by))}${c.onBehalf ? ' for ' + esc(seatName(c.prov)) : ''}.</p>`
+      + (open ? '' : `<p class="small muted">Approvals for this batch closed ${esc(C.shortDay(b.batch))} ${C.APPROVE_TXT}.</p>`);
+    $('#clmWd').hidden = !(open && canSubmit(e)); $('#clmWd').onclick = () => { d.close(); withdrawClaim(e.id, 'from the claim details'); };
+    if (!d.open) d.showModal();
+  }
+  $('#clmClose').addEventListener('click', () => $('#clmDlg').close());
+  // ---- the batch strip above the Today sheet (the after-cutoff roll-over note lives here)
+  function renderClmBar() {
+    const bar = $('#clmBar'); if (!bar || !S) return;
+    const now = Date.now(), b = C.batchFor(now, holN), w = C.edm(now), x = seats();
+    // b11: only the open batch counts as "needs approval" (service day in the 7 days up to its Thursday); older finished,
+    // unapproved claims are labelled separately. S.encs already holds only the billings this seat may view (seatSplit).
+    const from = C.addDays(b.batch, -6), apv = S.encs.filter(e => kindOf(e) !== 'shift' && C.stateOf(e) === 'approve').sort((p, q) => R.startOf(p) - R.startOf(q));
+    const inB = apv.filter(e => { const k = R.encDay(e); return k >= from && k <= b.batch; }), older = apv.filter(e => R.encDay(e) < from);
+    const need = inB.length; renderClmBar.first = inB[0] || older[0] || null;
+    let main;
+    if (b.rolled) { const prev = C.addDays(b.batch, -7); main = `<b>Approvals for this week’s H-Link batch (${esc(C.shortDay(prev))}) closed at ${C.APPROVE_TXT}.</b> Approvals now roll to the next batch: ${esc(b.weekTxt)}, H-Link cutoff ${esc(C.shortDay(b.batch))} ${C.SUBMIT_TXT}, expected pay <b>${esc(b.payTxt)}</b>.`; }
+    else if (w.wd === 4) main = `<b>Approvals for this week’s batch close today at ${C.APPROVE_TXT}</b> (H-Link cutoff ${C.SUBMIT_TXT}). Expected pay ${esc(b.payTxt)}.`;
+    else main = `Next H-Link batch: <b>${esc(b.batchTxt)}</b> · approvals close ${C.APPROVE_TXT} · expected pay ${esc(b.payTxt)}.`;
+    const noSex = S.encs.filter(e => kindOf(e) !== 'shift' && !C.queued(e) && (ptName(e) || ptMrn(e)) && C.sexMissing(e) && (k => k >= from && k <= b.batch)(R.encDay(e))).length;   // b11: AHS needs Sex; a reminder, never blocks approval
+    const fl = b.flags.map(f => `<span class="clmflag">⚠ ${esc(f.txt)}</span>`).join('') + (noSex ? `<span class="clmflag clmsex" title="AHS claim forms need the patient's sex (M, F, X or U). Tap the Sex cell on the row to set it. This does not block approval.">⚠ ${noSex} claim${noSex === 1 ? '' : 's'} missing Sex</span>` : '');
+    const st = isStaffSeat() ? `<span class="clmseat">Staff seat: <b>${esc(seatName(x.active))}</b>${workProv() ? '' : ' · no provider has given you access yet, so no billings are shown'}</span>` : '';
+    const nd = k => C.shortDay(k).replace(/^\w+ /, ''), short = b.rolled ? `⚠ Rolled to ${nd(b.batch)} batch · pay ${nd(b.pay)}` : w.wd === 4 ? `Closes today ${C.APPROVE_TXT} · pay ${nd(b.pay)}` : `Next batch ${nd(b.batch)} · pay ${nd(b.pay)}`;
+    bar.className = 'clmbar' + (b.rolled ? ' rolled' : w.wd === 4 ? ' today' : '') + (renderClmBar.open ? ' open' : '');
+    bar.title = 'Tap for details';
+    bar.innerHTML = `<span class="clmshort">${esc(short)}${noSex ? ` · ⚠ ${noSex} no Sex` : ''}</span><span class="clmmain">${main}</span>${need || older.length ? `<button type="button" class="clmneed" title="Open the claim to approve">${need ? `${need} claim${need === 1 ? '' : 's'} need${need === 1 ? 's' : ''} approval` : ''}${need && older.length ? ' · ' : ''}${older.length ? `${older.length} older (before ${esc(C.shortDay(from).replace(/^\w+ /, ''))})` : ''}</button>` : ''}${fl}${st}<span class="clmtest">Test build: H-Link not connected</span>`;
+    bar.hidden = false;
+  }
+  // b11: tapping the count opens the first claim waiting for approval (its day, its row, the entry window)
+  function openClaimRow(e) {
+    if (!e) return; const k = R.encDay(e); setDay(k);
+    requestAnimationFrame(() => { const tr = document.querySelector(`#todayList tr[data-id="${CSS.escape(e.id)}"]`); if (!tr) return toast('That claim is not on this sheet'); tr.scrollIntoView({ block: 'center' }); ewOpen(tr); });
+  }
+  $('#clmBar').addEventListener('click', ev => { if (ev.target.closest && ev.target.closest('.clmneed')) { ev.stopPropagation(); openClaimRow(renderClmBar.first); } }, true);
+  // ---- b11 patient search (magnifying glass): name, MRN / PHN, ULI / chart, across every day on this device. Local only:
+  // nothing is sent anywhere and the query is never stored or logged.
+  const ptNorm = v => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  function ptFind(q) {
+    const n = ptNorm(q).trim(), d = n.replace(/[^0-9a-z]/g, ''); if (!n) return [];
+    const toks = n.split(/[\s,]+/).filter(Boolean);
+    return S.encs.filter(e => kindOf(e) !== 'shift').filter(e => {
+      const nm = ptNorm(ptName(e)), ids = [ptMrn(e), e.mrn, e.chart, e.uli, e.phn].map(x => ptNorm(x).replace(/[^0-9a-z]/g, '')).filter(Boolean);
+      return (toks.length && toks.every(t => nm.includes(t))) || (d.length >= 3 && ids.some(x => x.includes(d)));
+    }).sort((a, b) => R.startOf(b) - R.startOf(a)).slice(0, 60);
+  }
+  function ptRender() {
+    const q = $('#ptQ').value, l = ptFind(q), td = today();
+    $('#ptRes').innerHTML = !q.trim() ? '' : l.length ? l.map(e => { const k = R.encDay(e); return `<li><button type="button" role="option" data-id="${esc(e.id)}"><b>${esc(ptName(e) || displayWho(e) || 'No name')}</b><span class="mono">${esc(ptMrn(e) || '')}</span><span class="ptday">${k === td ? 'Today' : esc(C.shortDay(k))}</span></button></li>`; }).join('') : '<li class="muted small">No patient matches.</li>';
+  }
+  $('#ptSearchBtn').addEventListener('click', () => { const d = $('#ptDlg'); $('#ptQ').value = ''; ptRender(); if (!d.open) d.showModal(); $('#ptQ').focus(); });
+  $('#ptQ').addEventListener('input', ptRender);
+  $('#ptQ').addEventListener('keydown', ev => { if (ev.key === 'Enter') { const b = $('#ptRes button'); if (b) b.click(); } else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); $('#ptDlg').close(); } });
+  $('#ptClose').addEventListener('click', () => $('#ptDlg').close());
+  $('#ptRes').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-id]'); if (!b) return; const e = S.encs.find(x => x.id === b.dataset.id); $('#ptDlg').close(); if (!e) return;
+    setDay(R.encDay(e));
+    requestAnimationFrame(() => { const tr = document.querySelector(`#todayList tr[data-id="${CSS.escape(e.id)}"]`); if (!tr) return; tr.scrollIntoView({ block: 'center' }); tr.classList.add('ptfound'); setTimeout(() => tr.classList.remove('ptfound'), 2400); const c = tr.querySelector('td.c-name .gc'); if (c) c.focus({ preventScroll: true }); });
+  });
+  $('#clmBar').addEventListener('click', () => { renderClmBar.open = !renderClmBar.open; $('#clmBar').classList.toggle('open', renderClmBar.open); sizeGrid(); });   // phones: one line until tapped
+  // ---- Thursday report (Claims tab): per provider, done / needs approval / to do, the week's billing and the expected pay
+  let clmThu = null;
+  function entryPay(e) {
+    if (!FEES) return null; const skill = String((e.ma && e.ma.skill) || (S.settings.ewDef || {}).skill || '').toUpperCase(); let t = 0, any = false;
+    for (const l of ewLines(e)) { if (!l.code) continue; const f = ewFee(String(l.code).toUpperCase(), l.mods.map(m => ({ c: m.c, u: String(m.u || '') })), l.q, skill); if (f) { t += f.tot; any = true; } }
+    return any ? t : null;
+  }
+  function renderClaims() {
+    const box = $('#clmRep'); if (!box || !S) return;
+    if (!FEES) { loadFees().then(() => { if (tab === 'claims') renderClaims(); }); }
+    const cur = C.openBatch(Date.now(), holN).batch; if (!clmThu) clmThu = cur;
+    const rep = C.weekReport({ thu: clmThu, encs: S.encs, seats: seats(), seatId: seatId(), dayOf: e => R.encDay(e), payOf: entryPay, holName: holN }), b = rep.batch;
+    $('#clmWk').textContent = `Batch ${b.batchTxt}`; $('#clmWkSub').textContent = `Service days ${rep.rangeTxt} · H-Link processing ${b.weekTxt}`;
+    $('#clmThis').disabled = clmThu === cur;
+    $('#clmBatch').innerHTML = `<span>Approvals close <b>${esc(C.shortDay(b.batch))} ${C.APPROVE_TXT}</b></span><span>H-Link cutoff <b>${C.SUBMIT_TXT}</b></span><span>Expected pay <b>${esc(b.payTxt)}</b></span>` + b.flags.map(f => `<span class="clmflag">⚠ ${esc(f.txt)}</span>`).join('');
+    const money2 = v => v == null ? '–' : money(v);
+    const item = (e, kind) => {
+      const cs = (e.codes || []).map(c => c.c).filter(Boolean).join(', ') || '—', p = entryPay(e), miss = C.missingOf(e);
+      const right = kind === 'done' ? `<span class="clmst">✓ ${esc(C.shortDay(e.claim.batch))} batch${e.claim.batch !== rep.thu ? ' (later batch)' : ''}</span>`
+        : kind === 'approve' ? (canSubmit(e) ? `<button type="button" class="apv sm" data-apv="${esc(e.id)}">Approve/Submit</button>` : '<span class="small muted">no submit permission</span>')
+        : `<span class="clmmiss">Missing: ${esc(miss.join(', '))}</span>`;
+      return `<li><span class="clmd mono">${esc(C.shortDay(R.encDay(e)))}</span><span class="clmn">${esc(displayWho(e))}</span><span class="clmc mono">${esc(cs)}</span><span class="clmp mono">${esc(money2(p))}</span>${right}</li>`;
+    };
+    const list = (l, kind, empty) => l.length ? `<ul class="clmlist">${l.sort((a, b2) => R.startOf(a) - R.startOf(b2)).map(e => item(e, kind)).join('')}</ul>` : `<p class="small muted">${empty}</p>`;
+    box.innerHTML = rep.rows.length ? rep.rows.map(r => `<section class="card clmprov"><h3>${esc(r.prov.name)}</h3>`
+      + `<div class="clmtiles"><div class="clmt done"><b>${r.done.length}</b><span>Done (queued)</span></div><div class="clmt appr"><b>${r.approve.length}</b><span>Needs approval</span></div><div class="clmt todo"><b>${r.todo.length}</b><span>To do</span></div>`
+      + `<div class="clmt bill"><b>${esc(money2(r.total))}</b><span>Week’s billing (estimate)</span></div><div class="clmt pay"><b>${esc(money2(r.queuedTotal))}</b><span>Expected ${esc(b.payTxt)} · ${r.queuedN} queued</span></div></div>`
+      + `<h4>Needs approval</h4>${list(r.approve, 'approve', 'Nothing waiting for approval.')}<h4>To do</h4>${list(r.todo, 'todo', 'Nothing missing.')}<h4>Done</h4>${list(r.done, 'done', 'No approved claims yet.')}`
+      + `<p class="small muted">Amounts are estimates from the bundled Alberta SOMB data (fees-AB.json), before any adjustment. Week = service days ${esc(rep.rangeTxt)} plus anything queued into this batch.</p></section>`).join('')
+      : '<div class="card"><p class="small">No provider has given this seat access to their billings yet. A provider can grant View / Submit in Settings → Staff seats and permissions.</p></div>';
+  }
+  $('#clmPrev').addEventListener('click', () => { clmThu = C.addDays(clmThu || C.openBatch(Date.now(), holN).batch, -7); renderClaims(); });
+  $('#clmNext').addEventListener('click', () => { clmThu = C.addDays(clmThu || C.openBatch(Date.now(), holN).batch, 7); renderClaims(); });
+  $('#clmThis').addEventListener('click', () => { clmThu = null; renderClaims(); });
+  $('#clmRep').addEventListener('click', ev => { const b = ev.target.closest('[data-apv]'); if (b) approveClaim(b.dataset.apv, 'Thursday report'); });
+  // ---- Settings → Staff seats and permissions; audit log of approvals and permission changes
+  function seatUi() {
+    if (!S || !$('#seatCard')) return; const x = seats(), me = x.active, mineProv = C.isProvider(x, me);
+    $('#seatSel').innerHTML = x.providers.map(p => `<option value="${esc(p.id)}">${esc(p.name)} (provider)</option>`).join('') + x.staff.map(s2 => `<option value="${esc(s2.id)}">${esc(s2.name)}${s2.role ? ' · ' + esc(s2.role) : ''} (staff)</option>`).join('');
+    $('#seatSel').value = me;
+    $('#seatProvs').innerHTML = x.providers.map(p => `<li><b>${esc(p.name)}</b>${p.id === x.providers[0].id ? ' <small class="muted">(this device’s owner)</small>' : ''}</li>`).join('');
+    $('#seatStaffN').textContent = x.staff.length ? '' : 'No staff seats yet.';
+    const head = `<tr><th scope="col">Staff seat</th>${x.providers.map(p => `<th scope="col" colspan="2">${esc(p.name)}</th>`).join('')}<th></th></tr><tr class="sub"><th></th>${x.providers.map(() => '<th scope="col">View</th><th scope="col">Submit</th>').join('')}<th></th></tr>`;
+    const rows = x.staff.map(s2 => `<tr><th scope="row">${esc(s2.name)}${s2.role ? `<small>${esc(s2.role)}</small>` : ''}</th>${x.providers.map(p => { const pm = C.permOf(x, p.id, s2.id), dis = !(mineProv && me === p.id);
+      return ['view', 'submit'].map(w => `<td><label class="pchk"><input type="checkbox" data-pp="${esc(p.id)}" data-ps="${esc(s2.id)}" data-pw="${w}"${pm[w] ? ' checked' : ''}${dis ? ' disabled' : ''} aria-label="${esc(`${s2.name}: ${w === 'view' ? 'view' : 'submit'} ${p.name}’s billings`)}"><span>${pm[w] ? 'On' : 'Off'}</span></label></td>`).join(''); }).join('')}<td>${mineProv ? `<button type="button" class="linkbtn sm" data-srm="${esc(s2.id)}">Remove</button>` : ''}</td></tr>`).join('');
+    $('#permTab').innerHTML = x.staff.length ? `<thead>${head}</thead><tbody>${rows}</tbody>` : '';
+    $('#permNote').textContent = mineProv ? `You are using ${seatName(me)}’s seat: you can change the permissions in your own columns. Everything starts Off. Submit needs View. Every change is in the audit log below.` : 'Staff seats cannot change permissions. Switch to a provider seat (passcode needed) to grant or remove access.';
+    $('#seatAddStaff').disabled = !mineProv; $('#seatAddProv').disabled = !mineProv;
+  }
+  async function seatSwitch(to) {
+    const x = seats(), from = x.active; if (to === from) return;
+    if (C.isProvider(x, to)) {   // into a provider seat: the passcode or passphrase is asked again
+      const v = await ask({ title: `Switch to ${seatName(to)}`, text: 'A provider seat sees and approves that provider’s billings. Enter the app passcode or passphrase.', ok: 'Switch', fields: [{ id: 'p', label: 'Passcode or passphrase' }], check: async v2 => (await V.verify(v2.p).catch(() => null)) ? '' : 'Wrong passcode or passphrase.' });
+      if (!v) { seatUi(); return; }
+    }
+    x.active = to; await seatsSave(x); seatSplit();
+    await V.appendAudit({ action: 'seat', note: `Seat changed from ${seatName(from)} to ${seatName(to)}`, by: seatName(from) });
+    histStale = true; render(); seatUi(); clmLogRender(); toast(`Now using ${seatName(to)}’s seat`);
+  }
+  $('#seatSel').addEventListener('change', () => seatSwitch($('#seatSel').value));
+  $('#seatAddStaff').addEventListener('click', async () => {
+    const v = await ask({ title: 'Add a staff seat', text: 'Staff get their own seat. They see nothing until a provider turns on View (and Submit) for them below.', ok: 'Add', fields: [{ id: 'n', label: 'Name', type: 'text' }, { id: 'r', label: 'Role (optional, e.g. billing clerk)', type: 'text' }], check: v2 => v2.n.trim() ? '' : 'Type a name.' });
+    if (!v) return; const x = seats(), id = 's' + uid(); x.staff = x.staff.concat({ id, name: v.n.trim().slice(0, 60), role: v.r.trim().slice(0, 40) });
+    await seatsSave(x); await V.appendAudit({ action: 'seat-add', note: `Staff seat added: ${v.n.trim()}${v.r.trim() ? ' (' + v.r.trim() + ')' : ''} by ${seatName(x.active)}. View and Submit off for every provider.`, by: seatName(x.active) });
+    seatUi(); clmLogRender();
+  });
+  $('#seatAddProv').addEventListener('click', async () => {
+    const v = await ask({ title: 'Add a provider seat', text: 'Another provider on this device. Each provider only sees their own billings and decides which staff may view or submit them.', ok: 'Add', fields: [{ id: 'n', label: 'Provider name', type: 'text' }], check: v2 => v2.n.trim() ? '' : 'Type a name.' });
+    if (!v) return; const x = seats(), id = 'p' + uid(); if (!S.settings.seats) x.providers = x.providers.map(p => Object.assign({}, p)); x.providers = x.providers.concat({ id, name: v.n.trim().slice(0, 80) });
+    await seatsSave(x); await V.appendAudit({ action: 'seat-add', note: `Provider seat added: ${v.n.trim()} by ${seatName(x.active)}`, by: seatName(x.active) }); seatUi(); clmLogRender();
+  });
+  $('#seatCard').addEventListener('change', async ev => {
+    const c = ev.target.closest('[data-pw]'); if (!c) return; const x = seats(), me = x.active;
+    if (!(C.isProvider(x, me) && me === c.dataset.pp)) { c.checked = !c.checked; return toast('Only that provider can change this permission'); }
+    const r = C.setPerm(x, c.dataset.pp, c.dataset.ps, c.dataset.pw, c.checked); if (!r.changes.length) return;
+    r.seats.active = me; await seatsSave(r.seats);
+    const who = seatName(me), staff = seatName(c.dataset.ps);
+    await V.appendAudit({ action: 'perm', by: who, note: `${who} set ${staff}’s access to ${seatName(c.dataset.pp)}’s billings: ${r.changes.map(ch => `${ch.what === 'view' ? 'View' : 'Submit'} ${ch.from ? 'on' : 'off'} → ${ch.to ? 'on' : 'off'}`).join(', ')}`, before: { perm: r.changes.map(ch => [ch.what, ch.from]) }, after: { perm: r.changes.map(ch => [ch.what, ch.to]) } });
+    seatUi(); clmLogRender();
+  });
+  $('#seatCard').addEventListener('click', async ev => {
+    const b = ev.target.closest('[data-srm]'); if (!b) return; const x = seats(), s2 = x.staff.find(y => y.id === b.dataset.srm); if (!s2) return;
+    const v = await ask({ title: `Remove ${s2.name}?`, text: 'Their seat and every permission given to it are removed. The audit log keeps the history.', ok: 'Remove', danger: true }); if (!v) return;
+    x.staff = x.staff.filter(y => y.id !== s2.id); const perm = {}; for (const [k, p] of Object.entries(x.perm)) if (!k.endsWith('|' + s2.id)) perm[k] = p; x.perm = perm;
+    await seatsSave(x); await V.appendAudit({ action: 'seat-remove', by: seatName(x.active), note: `Staff seat removed: ${s2.name} by ${seatName(x.active)} (all permissions removed)` }); seatUi(); clmLogRender();
+  });
+  const CLM_ACTS = { approve: 1, withdraw: 1, perm: 1, seat: 1, 'seat-add': 1, 'seat-remove': 1 };
+  async function clmLogRender() {
+    const box = $('#clmLog'); if (!box || !S || !V.unlocked()) return;
+    const recs = (await V.loadAudit().catch(() => [])).filter(r => CLM_ACTS[r.action]).slice(-40).reverse();
+    const lab = { approve: 'Approved', withdraw: 'Withdrawn', perm: 'Permission', seat: 'Seat switch', 'seat-add': 'Seat added', 'seat-remove': 'Seat removed' };
+    const whoOf = r => r.by || (r.after && r.after.claim && r.after.claim.byName) || (r.before && r.before.claim && r.before.claim.byName) || '';
+    const what = r => { if (r.action === 'approve' || r.action === 'withdraw') { const e = S.encs.find(x => x.id === r.eid); const nm = e ? displayWho(e) : 'a claim you cannot view'; return `${nm}: ${String(r.note || '').replace(/^Approve\/Submit[^.]*\.\s*/, '')}`; } return r.note || ''; };
+    box.innerHTML = recs.length ? `<table class="clmlogt"><thead><tr><th scope="col">When (MT)</th><th scope="col">Who</th><th scope="col">What</th></tr></thead><tbody>${recs.map(r => `<tr><td class="mono">${esc((w => `${w.key} ${String(w.h).padStart(2, '0')}:${String(w.mi).padStart(2, '0')}`)(C.edm(r.ts)))}</td><td>${esc(whoOf(r))}</td><td><b>${esc(lab[r.action] || r.action)}</b> · ${esc(what(r))}</td></tr>`).join('')}</tbody></table>` : '<p class="small muted">No approvals or permission changes yet.</p>';
+  }
+  $('#clmLogRefresh').addEventListener('click', clmLogRender);
+  // ---- N: a new billing entry (entry window on the first empty row of Today) when you are not typing in a field
+  function newEntry() {
+    if (!S) return; if (isStaffSeat() && !workProv()) return toast('No provider has given this seat access yet', 3500);
+    if (tab !== 'today') { tab = 'today'; showTab(); }
+    if (viewDay && viewDay !== today()) setDay(today());
+    requestAnimationFrame(() => { const tr = $('#todayList table.grid tbody tr[data-blank]'); if (!tr) return; if (tr.dataset.light) lightUp(tr); ewOpen(tr); });
+  }
+  document.addEventListener('keydown', ev => {
+    if ((ev.key !== 'n' && ev.key !== 'N') || ev.ctrlKey || ev.metaKey || ev.altKey || ev.repeat || !S || document.body.classList.contains('locked')) return;
+    const t = ev.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (document.querySelector('dialog[open], .cro-overlay') || ($('#crDrawer') && !$('#crDrawer').hidden)) return;
+    ev.preventDefault(); newEntry();
+  });
+  // ---- entry window: Tab follows the owner's Med Access billing screen (photo 2026-10-14 7:22 PM MT). Med Access, row by row:
+  // Billing provider, Skill, Referring provider / BA #, Facility, Functional centre, Location; each health service: Code,
+  // Calls, Date, then Diagnosis, Modifier (units); then Admission date, General, EMSAF, Newborn, Good faith / Original
+  // facility, Original location, Encounter, Conf. / Intercept reason, Limit amount, Send as conf. / Internal comment.
+  // Fields Med Access has elsewhere (patient: chart header) or not at all (In / Out, H/C) are placed where they fit best;
+  // BA # comes before Referring provider so Referring provider → Facility # stays together (the owner, 2026-10-16).
+  const EW_TAB_HEAD = ['name', 'mrn', 'sex', 'prov', 'skill', 'ba', 'refNm', 'refId', 'fno', 'fcen', 'hc', 'loc'];
+  const EW_TAB_FOOT = ['tin', 'tout', 'admit', 'general', 'emsaf', 'newborn', 'goodFaith', 'origFac', 'origLoc', 'encNo', 'conf', 'intercept', 'limitAmt', 'sendConf', 'note'];
+  function ewTabList() {
+    const v = ewRead(), keys = EW_TAB_HEAD.slice();
+    for (let i = 0; i < ewLineCount(v); i++) { keys.push(`s${i}_code`, `s${i}_q`, `s${i}_sd`, `s${i}_dx`); for (let j = 0; j < ewModCount(v, i); j++) keys.push(`s${i}_m${j}`, `s${i}_u${j}`); }
+    keys.push(...EW_TAB_FOOT);
+    const ok = el => el && !el.disabled && el.offsetParent !== null, out = [];
+    for (const k of keys) { const el = ewF(k); if (ok(el) && !out.includes(el)) out.push(el); }
+    for (const el of $$('#ewBody .ewi, #ewBody .ewc1')) if (ok(el) && !out.includes(el)) out.push(el);   // anything new still reachable
+    return out;
+  }
+  $('#ewDlg').addEventListener('keydown', ev => {
+    if (!ew || ev.key !== 'Tab' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    const el = ev.target; if (!el || !el.closest || !el.closest('#ewBody')) return;
+    const l = ewTabList(), i = l.indexOf(el); if (i < 0) return;
+    const n = l[i + (ev.shiftKey ? -1 : 1)];
+    if (n) { ev.preventDefault(); ewMenuClose(); n.focus(); if (n.select && n.type !== 'checkbox' && n.type !== 'date') n.select(); n.scrollIntoView({ block: 'nearest' }); }
+    else if (!ev.shiftKey) { ev.preventDefault(); ewMenuClose(); ($('#ewApv') && !$('#ewApv').disabled ? $('#ewApv') : $('#ewSave')).focus(); }
+  }, true);
+  function ewApvUi() {
+    const b = $('#ewApv'); if (!b || !ew) return; const e = ew.id && S.encs.find(x => x.id === ew.id);
+    if (e && C.queued(e)) { const bb = C.batchOf(e.claim.batch, holN, e.claim.rolled); b.textContent = `✓ Queued for H-Link (${C.shortDay(e.claim.batch)})`; b.disabled = true; b.title = C.noteFor(bb); return; }
+    const ok = !e || canSubmit(e); b.textContent = 'Approve/Submit'; b.disabled = !ok; b.title = ok ? 'Save, then approve this claim and queue it for the next H-Link batch (counts as provider approval)' : 'You do not have permission to submit this provider’s billings';
+  }
+  $('#ewApv').addEventListener('click', async () => {
+    if (!ew) return; if (!(await ewSave())) return; await gQ; const id = ew && ew.id;
+    if (!id) return toast('Type something in the entry first');
+    if (await approveClaim(id, 'entry window')) ewClose(); else ewApvUi();
+  });
+  // ---- Referring provider list for the sheet's ▾ (favourites first, recent, search by name or practitioner ID). There is no
+  // public Alberta practitioner directory to bundle, so entries are the name plus the Alberta practitioner ID you type.
+  let refCtx = null;
+  const refKey = r => (r.n || '') + '\u0001' + (r.id || '');
+  function refAll() {
+    const st = S.settings, fav = st.favRef || [], seen = new Set(fav.map(refKey)), rec = [];
+    for (const r of (st.recRef || []).concat(ewRecent(e => e.refNm || e.refId ? { key: refKey({ n: e.refNm, id: e.refId }), n: e.refNm || '', id: e.refId || '' } : null, 30, 365))) { const k = refKey(r); if (!seen.has(k) && (r.n || r.id)) { seen.add(k); rec.push({ n: r.n || '', id: r.id || '' }); } }
+    return { fav, rec };
+  }
+  function refRender() {
+    if (!refCtx) return; const q = fz($('#refQ').value.trim()), m = r => !q || fz(r.n + ' ' + r.id).includes(q), { fav, rec } = refAll(), fk = new Set(fav.map(refKey));
+    const row = r => `<li><button type="button" class="refo" data-rn="${esc(r.n)}" data-ri="${esc(r.id)}"><b>${esc(r.n || '(no name)')}</b><span class="mono">${esc(r.id || 'no ID')}</span></button><button type="button" class="reff${fk.has(refKey(r)) ? ' on' : ''}" data-fn="${esc(r.n)}" data-fi="${esc(r.id)}" aria-pressed="${fk.has(refKey(r))}" aria-label="${fk.has(refKey(r)) ? 'Remove from' : 'Add to'} favourites" title="Favourite">${fk.has(refKey(r)) ? '★' : '☆'}</button></li>`;
+    const t = parseRef($('#refQ').value);
+    $('#refList').innerHTML = `<div class="refsec">Favourites</div>${fav.filter(m).length ? `<ul>${fav.filter(m).map(row).join('')}</ul>` : '<p class="small muted">None yet. Tap ☆ beside a provider.</p>'}`
+      + `<div class="refsec">Recent</div>${rec.filter(m).length ? `<ul>${rec.filter(m).slice(0, 30).map(row).join('')}</ul>` : '<p class="small muted">No recent referring providers.</p>'}`
+      + ($('#refQ').value.trim() ? `<div class="refsec">Typed</div><ul><li><button type="button" class="refo" data-rn="${esc(t.n)}" data-ri="${esc(t.id)}"><b>Use “${esc($('#refQ').value.trim())}”</b><span class="mono">${t.id ? 'ID ' + esc(t.id) : 'name only (add the practitioner ID if you have it)'}</span></button></li></ul>` : '');
+  }
+  function refPick(tr) {
+    const c = tr && tr.querySelector('.gc[data-c="ref"]'); if (!c || !S) return; refCtx = { c };
+    const d = $('#refDlg'); $('#refQ').value = ''; refRender(); if (!d.open) d.showModal(); $('#refQ').focus();
+  }
+  $('#refQ').addEventListener('input', refRender);
+  $('#refQ').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); const b = $('#refList .refo'); if (b) b.click(); } });
+  $('#refList').addEventListener('click', async ev => {
+    const f = ev.target.closest('.reff'); if (f) { const r = { n: f.dataset.fn, id: f.dataset.fi }, k = refKey(r), l = S.settings.favRef || []; S.settings.favRef = l.some(x => refKey(x) === k) ? l.filter(x => refKey(x) !== k) : l.concat(r); await saveSettings(); refRender(); fpSetUi(); return; }
+    const o = ev.target.closest('.refo'); if (!o || !refCtx) return; const c = refCtx.c; refCtx = null; $('#refDlg').close();
+    const v = [o.dataset.rn, o.dataset.ri].filter(Boolean).join(', ');
+    if (!document.contains(c)) return; c.value = v; commitCell(c); focusCell(c);
+  });
+  $('#refClose').addEventListener('click', () => { refCtx = null; $('#refDlg').close(); });
   // ------------------------------------------------------------ boot
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  loadProvs().then(() => showLock(pickLockMsg()));
+  Promise.all([loadProvs(), V.dev.load()]).then(() => { lsMigrateDev(); showLock(pickLockMsg()); });
   window.BLApp = { lockNow };
 })();

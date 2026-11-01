@@ -3,7 +3,7 @@
 // header / week strip; period bar wording and its consistency with the totals; CSV keeps minutes + adds hours_minutes; reports.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18792/medbilling-logs/ OUT=/workspace/artifacts/mbl-v9p node /workspace/medbilling-logs/tests/totals-v9p.test.js
 const path = require('path'), fs = require('fs');
-const { chromium, webkit } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium, webkit } = require('./helpers/cr-welcome');
 const URL0 = process.env.URL || 'http://127.0.0.1:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9p'; fs.mkdirSync(OUT, { recursive: true });
 const PIN = '48203917', DAY = '2026-10-06';
@@ -62,6 +62,8 @@ async function setup(browser, o, label) {
       ok(cmp.bar != null && (cmp.bar === 0 ? !lu || +lu === 0 : +lu === cmp.bar), `${L}: period bar "${cmp.nm} time logged: ${cmp.bar}" matches the totals line "${cmp.line}"`);
       // History
       await p.click('#tabs [data-tab="history"]'); await p.waitForTimeout(800);
+      // DAY is fixed (2026-10-06); the week strip opens on the current week, so page back to DAY's week first (date drift)
+      for (let i = 0; i < 60 && !(await p.$(`#wsHist [data-day="${DAY}"]`)) && await p.$('#wsHist [data-nav="-1"]'); i++) { await p.click('#wsHist [data-nav="-1"]'); await p.waitForTimeout(60); }
       const h = await p.evaluate(DAY => { const t = document.querySelector(`#histList table.grid[data-day="${DAY}"]`); const wk = [...document.querySelectorAll('#histList .weekh')].map(x => x.textContent).join(' | '); const cell = document.querySelector(`#wsHist [data-day="${DAY}"]`); return { tm: t && t.tFoot.querySelector('[data-tm]').textContent, lines: t ? [...t.tFoot.querySelectorAll('[data-tl] span')].map(s => s.textContent) : [], wk, cell: cell && cell.textContent, wst: (document.querySelector('#wsHist .wst') || {}).textContent }; }, DAY);
       ok(h.tm === '6 h 11' && h.lines[0] === 'Hospital 5 h 41 min · 23 units', `${L}: History day footer "${h.tm}" / ${h.lines.slice(0, 3).join(' / ')}`);
       ok(/Hospital \d+ h( \d+ min)? · \d+ units/.test(h.wk) && !/\bmin\/|\bCB\b| u ·/.test(h.wk), `${L}: History week header "${h.wk.slice(0, 90)}"`);

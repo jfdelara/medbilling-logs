@@ -1,8 +1,8 @@
 /* Offline cache for MedBilling Logs. Same-origin GET only; the app has no network calls with data.
    App shell is network-first (updates show immediately), falling back to cache offline. */
-const V = 'bl-v9q-2026-10-08';
-const ASSETS = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/vault.js', 'js/pwpolicy.js', 'js/easyunlock.js', 'js/search.js', 'js/docx.js', 'js/xlsx.js', 'js/report.js', 'js/vendor/jspdf.umd.min.js', 'js/vendor/zip.min.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/icon-maskable-512.png',
-  'data/codes-index.json', 'data/facilities.json', 'data/ahcip-facilities.json', 'data/codes-AB.json', 'data/codes-MB.json', 'data/codes-NL.json', 'data/codes-SK.json', 'data/codes-NT.json', 'data/codes-YT.json', 'data/icd9-AB.json'];
+const V = 'bl-v13-20261101-url-switch-h-no-surname';
+const ASSETS = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/vault.js', 'js/pwpolicy.js', 'js/easyunlock.js', 'js/search.js', 'js/docx.js', 'js/xlsx.js', 'js/report.js', 'js/claims.js', 'js/scan.js', 'js/cr-init.js', 'js/rowfmt-boot.js', 'js/shared/rowfmt.js', 'css/shared/suite.css', 'css/shared/spui.css', 'js/shared/spui.js', 'js/move-config.js', 'js/shared/move.js', 'css/shared/move.css', 'js/shared/suite.js', 'js/shared/short-names.js', 'js/shared/favrow.js', 'js/favrow-boot.js', 'css/shared/favrow.css', 'clinical-resources/cr-registry.js', 'clinical-resources/cr-core.js', 'clinical-resources/cr-panel.js', 'clinical-resources/cr-onboarding.js', 'clinical-resources/cr.css', 'js/vendor/jspdf.umd.min.js', 'js/vendor/zip.min.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/icon-maskable-512.png',
+  'data/codes-index.json', 'data/facilities.json', 'data/ahcip-facilities.json', 'data/codes-AB.json', 'data/codes-MB.json', 'data/codes-NL.json', 'data/codes-SK.json', 'data/codes-NT.json', 'data/codes-YT.json', 'data/icd9-AB.json', 'data/fees-AB.json'];
 self.addEventListener('install', e => e.waitUntil(
   caches.open(V).then(c => Promise.all(ASSETS.map(a => fetch(new Request(a, { cache: 'reload' })).then(r => { if (r.ok) return c.put(a, r); }))))
     .then(() => self.skipWaiting())));

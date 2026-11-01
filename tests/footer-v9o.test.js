@@ -2,7 +2,7 @@
 // sits inside the grid's scroll area after the last row, so it shows only after scrolling past the rows. Endless rows keep working.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18792/medbilling-logs/ OUT=/workspace/artifacts/mbl-v9o node /workspace/medbilling-logs/tests/footer-v9o.test.js
 const path = require('path'), fs = require('fs');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium } = require('./helpers/cr-welcome');
 const URL = process.env.URL || 'http://127.0.0.1:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9o'; fs.mkdirSync(OUT, { recursive: true });
 const PIN = '48203917';
@@ -24,7 +24,8 @@ async function setup(browser, o, label) {
 const geo = p => p.evaluate(() => {
   const w = document.querySelector('#todayList .gwrap.main'), f = document.querySelector('footer.foot'), tabs = document.querySelector('#tabs'), tb = w.querySelector('table.grid tbody');
   const wr = w.getBoundingClientRect(), fr = f.getBoundingClientRect(), last = tb.rows[tb.rows.length - 1].getBoundingClientRect();
-  return { ih: innerHeight, docH: document.documentElement.scrollHeight, sy: scrollY, wTop: Math.round(wr.top), wBot: Math.round(wr.bottom), tabsBot: Math.round(tabs.getBoundingClientRect().bottom),
+  const tbh = getComputedStyle(tabs).position === 'fixed' ? Math.round(innerHeight - tabs.getBoundingClientRect().top) : 0;
+  return { tbh, ih: innerHeight, docH: document.documentElement.scrollHeight, sy: scrollY, wTop: Math.round(wr.top), wBot: Math.round(wr.bottom), tabsBot: Math.round(tabs.getBoundingClientRect().bottom),
     inGrid: !!f.closest('#todayList .gwrap.main'), fTop: Math.round(fr.top), fBot: Math.round(fr.bottom), lastBot: Math.round(last.bottom), rows: tb.rows.length,
     fVisibleInGrid: fr.top < wr.bottom - 20 && fr.bottom > wr.top, txt: f.innerText, fW: Math.round(fr.width), wW: Math.round(w.clientWidth), st: w.scrollTop, sh: w.scrollHeight, ch: w.clientHeight };
 });
@@ -34,7 +35,7 @@ async function run(browser, label, o) {
   await p.waitForFunction(() => !document.querySelector('#toast.show'), null, { timeout: 8000 }).catch(() => {});
   let g = await geo(p);
   ok(g.inGrid, `${label}: footer lives inside the Today grid's scroll area`);
-  ok(g.wBot >= g.ih - 40 && g.wBot <= g.ih, `${label}: grid fills to the bottom of the screen (grid bottom ${g.wBot} of ${g.ih}px)`);
+  ok(g.wBot >= g.ih - g.tbh - 40 && g.wBot <= g.ih - g.tbh, `${label}: grid fills to the bottom of the screen, above the suite tab bar (bar ${g.tbh}px) (grid bottom ${g.wBot} of ${g.ih}px)`);
   ok(g.docH <= g.ih + 1, `${label}: the page itself does not scroll (page ${g.docH}px, screen ${g.ih}px), so nothing sits below the grid`);
   ok(!g.fVisibleInGrid && g.fTop >= g.wBot, `${label}: footer not visible before scrolling (footer top ${g.fTop}, grid bottom ${g.wBot})`);
   await p.screenshot({ path: path.join(OUT, `footer-${label}-top.png`) });
@@ -45,7 +46,7 @@ async function run(browser, label, o) {
   ok(r1 >= r0 + 30 && r1 <= r0 + 30, `${label}: scrolling still adds empty rows (${r0} → ${r1}), then stops so the footer can be reached`);
   ok(g.fVisibleInGrid && g.fTop >= g.lastBot - 1, `${label}: after scrolling past the last row the footer shows below it (last row bottom ${g.lastBot}, footer ${g.fTop}–${g.fBot})`);
   ok(g.fBot <= g.wBot + 1, `${label}: the whole footer can be scrolled into view (footer bottom ${g.fBot}, grid bottom ${g.wBot})`);
-  const need = ['Time log only', 'Passcode-locked and encrypted', 'MedBilling Fee Desk', 'Help / User manual', "Part of Medibrisa", '© 2026 MedBilling Logs', 'unit'];
+  const need = ['Time log only', 'Passcode-locked and encrypted', 'MedBilling Fee Desk', 'Help / User manual', "Part of Medibrisa Software Ltd.", '© 2026 Medibrisa Software Ltd.', 'unit'];
   ok(need.every(s => g.txt.includes(s)), `${label}: all footer text kept (${need.filter(s => !g.txt.includes(s)).join(', ') || 'all present'})`);
   ok(Math.abs(g.fW - Math.min(g.wW, 760)) <= 24 || g.fW <= g.wW, `${label}: footer fits the visible grid width (${g.fW} / ${g.wW}px)`);
   await p.screenshot({ path: path.join(OUT, `footer-${label}-scrolled.png`) });
@@ -59,7 +60,7 @@ async function run(browser, label, o) {
     const n0 = (await geo(p)).rows;
     await p.evaluate(() => { const w = document.querySelector('#todayList .gwrap.main'), r = w.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
       const T = yy => new Touch({ identifier: 1, target: w, clientX: x, clientY: yy });
-      w.dispatchEvent(new TouchEvent('touchstart', { touches: [T(y)], bubbles: true })); w.dispatchEvent(new TouchEvent('touchmove', { touches: [T(y - 80)], bubbles: true })); w.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true })); });
+      w.dispatchEvent(new TouchEvent('touchstart', { touches: [T(y)], changedTouches: [T(y)], bubbles: true })); w.dispatchEvent(new TouchEvent('touchmove', { touches: [T(y - 80)], changedTouches: [T(y - 80)], bubbles: true })); w.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [T(y - 80)], bubbles: true }));   /* changedTouches set, as a real browser does */ });
     await p.waitForTimeout(200); g2 = await geo(p); if (process.env.DBG) console.log(await p.evaluate(() => { const w = document.querySelector('#todayList .gwrap.main'); return [w.scrollTop, w.clientHeight, w.scrollHeight, typeof Touch]; }));
     ok(g2.rows === n0 + 10, `${label}: dragging up at the end on a phone adds 10 more rows (${n0} → ${g2.rows})`);
   }
