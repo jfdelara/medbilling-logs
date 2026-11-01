@@ -171,7 +171,7 @@ async function decrypt(page, env, pass) { return page.evaluate(async ([vb, p]) =
     const G = await F.context().newPage(); await G.goto(URL); await G.waitForTimeout(800);
     ok(await G.isVisible('#mvBanner'), `[${w}] shows again in a new session (new tab)`);
   }
-  const fd = '/workspace/delara-medbilling/public';
+  const fd = '/workspace/feedesk/public';
   ok(fs.readFileSync(path.join(__dirname, '../public/js/shared/move.js'), 'utf8') === fs.readFileSync(fd + '/js/shared/move.js', 'utf8') || !fs.existsSync(fd), 'parity: move.js byte-identical to Fee Desk');
   ok(fs.readFileSync(path.join(__dirname, '../public/css/shared/move.css'), 'utf8') === fs.readFileSync(fd + '/css/shared/move.css', 'utf8') || !fs.existsSync(fd), 'parity: move.css byte-identical to Fee Desk');
   ok(errors.length === 0, 'no page errors ' + errors.slice(0, 3).join(' | '));

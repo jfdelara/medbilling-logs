@@ -11,7 +11,7 @@
 const path = require('path'), fs = require('fs');
 const { chromium, NAME_POS, pickTypeIfScanMenu } = require('./helpers/cr-welcome');
 const BASE = (process.env.BASE || 'http://127.0.0.1:18792/').replace(/\/?$/, '/');
-const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'delara-medbilling/';
+const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'feedesk/';
 const OUT10 = process.env.OUT10 || '/workspace/artifacts/multipick10'; fs.mkdirSync(OUT10, { recursive: true });
 const OUT = process.env.OUT || '/workspace/artifacts/multipick', SHOTS = process.argv[2] === 'shots'; fs.mkdirSync(OUT, { recursive: true });
 const PIN = '48203917';
@@ -59,7 +59,7 @@ async function suite(browser, o, label, touch) {
   await p.waitForSelector(`${G} tbody tr:nth-child(1)[data-id]`); await p.waitForTimeout(500);
 
   // A. ＋ a fee code, an ICD-9 code and a modifier → one send fills Fee code(s), Dx and Modifier code 1
-  let fdUrl = ''; ctx.on('request', r => { if (r.isNavigationRequest() && r.url().includes('/delara-medbilling/?')) fdUrl = r.url(); });
+  let fdUrl = ''; ctx.on('request', r => { if (r.isNavigationRequest() && r.url().includes('/feedesk/?')) fdUrl = r.url(); });
   let fd = await openPick(p, pickBtn(1, 'fee'), touch, cell(1, 'fee'));
   ok(new URL(fdUrl || 'http://x/').searchParams.get('pv') === '2' && new URL(fdUrl || 'http://x/').searchParams.get('pmax') === '10', `${label}: ↗ asks Fee Desk for the multi-code return (pv=2, pmax=10)`);
   ok(/＋ to pick several/.test(await fd.textContent('#pickbar')), `${label}: Fee Desk shows the multi-code banner`);
@@ -130,7 +130,7 @@ async function suite(browser, o, label, touch) {
     await p.waitForSelector(`${G} tbody tr:nth-child(2)[data-id]`); await p.waitForTimeout(400);
     await p.evaluate(() => { window.open = () => null; });
     await tapOrClick(p, cell(2, 'fee'), touch); await p.waitForTimeout(150);
-    await Promise.all([p.waitForURL(/delara-medbilling/), p.locator(pickBtn(2, 'fee')).evaluate(b => b.click())]);
+    await Promise.all([p.waitForURL(/feedesk/), p.locator(pickBtn(2, 'fee')).evaluate(b => b.click())]);
     await p.waitForSelector('#pickbar'); await fdSearch(p, '03.03A'); await p.click('#results .hit[data-code="03.03A"] .psel');
     await fdIcd(p, '650', '650'); await p.click('#icdresults .icdrow[data-icd="650"] .psel');
     await fdMod(p, 'CMGP'); await p.click('.modrow[data-mod="CMGP"] .psel');

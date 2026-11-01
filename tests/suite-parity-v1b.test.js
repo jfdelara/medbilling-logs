@@ -3,7 +3,7 @@
 const { chromium } = require('./helpers/cr-welcome');
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const BASE = (process.env.BASE || 'http://127.0.0.1:18998/').replace(/\/?$/, '/');
-const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'delara-medbilling/', PIN = '48203917';
+const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'feedesk/', PIN = '48203917';
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
 const LABELS = { dPrev: 'Prev', dNext: 'Next', dToday: 'Today', ptSearchBtn: 'Search', gPrev: 'Cell', gNext: 'Cell', gUndo: 'Undo', gRedo: 'Redo', crOpen: 'Resources', cbBtn: 'Call-back', repToday: 'Report', moreBtn: 'More' };
 async function boot(browser, vp) {

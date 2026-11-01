@@ -6,7 +6,7 @@
 const path = require('path'), fs = require('fs');
 const { chromium, webkit, NAME_POS, pickTypeIfScanMenu } = require('./helpers/cr-welcome');
 const BASE = (process.env.BASE || 'http://127.0.0.1:18792/').replace(/\/?$/, '/');
-const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'delara-medbilling/';
+const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'feedesk/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9p'; fs.mkdirSync(OUT, { recursive: true });
 const PIN = '48203917';
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1';

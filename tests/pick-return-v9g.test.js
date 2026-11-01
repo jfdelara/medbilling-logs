@@ -7,7 +7,7 @@
 const path = require('path');
 const { chromium, NAME_POS, pickTypeIfScanMenu } = require('./helpers/cr-welcome');
 const BASE = (process.env.BASE || 'http://127.0.0.1:18792/').replace(/\/?$/, '/');
-const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'delara-medbilling/';
+const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'feedesk/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-pick-return';
 // v9l / Fee Desk v36: Logs now asks for the multi-code return (pv=2), so Alberta pick mode shows the multi-code banner
 // (with a Modifiers button); a plain tap still sends one code, which is what this suite checks. See multipick-v9l.test.js.
@@ -26,7 +26,7 @@ function watch(p, label) {
 async function setup(browser, o, label) {
   const ctx = await browser.newContext(Object.assign({ timezoneId: 'America/Edmonton' }, o));
   ctx.on('page', pg => watch(pg, label + ' fd'));
-  ctx.on('request', r => { if (r.isNavigationRequest() && r.url().includes('/delara-medbilling/')) fdUrls.push(r.url()); });
+  ctx.on('request', r => { if (r.isNavigationRequest() && r.url().includes('/feedesk/')) fdUrls.push(r.url()); });
   const p = await ctx.newPage(); watch(p, label);
   await p.goto(LOGS); await p.waitForSelector('#setupForm:not([hidden])');
   await p.check('input[name=sKind][value=pin]'); await p.fill('#sPass', PIN); await p.fill('#sPass2', PIN); await p.check('#sAck'); await p.check('#sResp'); await p.click('#sBtn');
@@ -158,7 +158,7 @@ async function suite(browser, o, label, touch) {
   await p.waitForSelector(`${G} tbody tr:nth-child(2)[data-id]`); await p.waitForTimeout(400);
   await p.evaluate(() => { window.open = () => null; });
   await tapOrClick(p, cell(2, 'fee'), touch); await p.waitForTimeout(150);
-  await Promise.all([p.waitForURL(/delara-medbilling/), p.locator(pickBtn(2, 'fee')).evaluate(b => b.click())]);
+  await Promise.all([p.waitForURL(/feedesk/), p.locator(pickBtn(2, 'fee')).evaluate(b => b.click())]);
   await p.waitForSelector('#pickbar');
   await fdSearch(p, '03.05JR');
   await Promise.all([p.waitForURL(/medbilling-logs/), tapOrClick(p, '#results .hit[data-code="03.05JR"]', touch)]);

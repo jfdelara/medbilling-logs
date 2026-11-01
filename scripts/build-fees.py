@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Build public/data/fees-AB.json (v9t entry window: fee estimates and rule checks) from MedBilling Fee Desk's bundled
-Alberta SOMB data (/workspace/delara-medbilling/public/data/codes.json; Alberta Health, Schedule of Medical Benefits,
+Alberta SOMB data (/workspace/feedesk/public/data/codes.json; Alberta Health, Schedule of Medical Benefits,
 Open Government Licence - Alberta). Per code: base, skill fees, modifier actions, and flags:
   f = obstetric / female genital code (usually female patient only), m = male genital code,
   r = usually needs a referring provider (consultations, interpretations, notes that mention a referral),
   t = time-premium code that needs a time modifier (SURT)."""
 import json, re, os, sys
-SRC = sys.argv[1] if len(sys.argv) > 1 else '/workspace/delara-medbilling/public/data/codes.json'
+SRC = sys.argv[1] if len(sys.argv) > 1 else '/workspace/feedesk/public/data/codes.json'
 OUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'data', 'fees-AB.json')
 d = json.load(open(SRC))
 meta = json.load(open(os.path.join(os.path.dirname(SRC), 'meta.json'))) if os.path.exists(os.path.join(os.path.dirname(SRC), 'meta.json')) else {}

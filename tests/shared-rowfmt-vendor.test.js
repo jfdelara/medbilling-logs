@@ -1,12 +1,12 @@
 // b11: Logs vendors Fee Desk's shared code-row formatter. The two files in public/js/shared/ must stay byte-identical to
 // Fee Desk's public/js/shared/ (source commit a11ad4c) and to the pinned sha256s below. If the Fee Desk folder is absent
 // (e.g. a Logs-only zip), the cross-app comparison is skipped with a reason; the pinned-hash checks always run.
-// Fee Desk folder: FEEDESK_DIR, else ../../delara-medbilling relative to this file (the /workspace layout).
+// Fee Desk folder: FEEDESK_DIR, else ../../feedesk relative to this file (the /workspace layout).
 // Run: node tests/shared-rowfmt-vendor.test.js
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const PIN = { 'rowfmt.js': '23c3e40e9621f8a8eacde0c3d9f838b152d12b99312dfbb68c014341df709c88', 'short-names.js': '0135c556fcda7af3753725120ff8fecdd69aa800bbb767e68ec07ac5dd50ca06' };
 const LOGS = path.join(__dirname, '..', 'public', 'js', 'shared');
-const FD = path.join(process.env.FEEDESK_DIR || path.join(__dirname, '..', '..', 'delara-medbilling'), 'public', 'js', 'shared');
+const FD = path.join(process.env.FEEDESK_DIR || path.join(__dirname, '..', '..', 'feedesk'), 'public', 'js', 'shared');
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 for (const [f, h] of Object.entries(PIN)) {

@@ -44,7 +44,7 @@ async function boot(browser, vp) {
     ok(pane.groups.join('|') === 'Synthetic group|Ungrouped' && pane.recent === 1, `${w}: Fee Desk groups (read-only headings) and Recent shown`);
     await p.click('#favManage'); await p.click('#favList .star');
     const op = await p.evaluate(() => window.__opened);
-    ok(op.length === 2 && /delara-medbilling\/#\/favmanage$/.test(op[0][0]) && /#\/fav\/unstar\/[HI]%3A[0-9.A-Z]+$/.test(op[1][0]) && op.every(o => o[1] === 'mbfeedesk'), `${w}: Manage and ★ deep-link into Fee Desk ${JSON.stringify(op)}`);
+    ok(op.length === 2 && /feedesk\/#\/favmanage$/.test(op[0][0]) && /#\/fav\/unstar\/[HI]%3A[0-9.A-Z]+$/.test(op[1][0]) && op.every(o => o[1] === 'mbfeedesk'), `${w}: Manage and ★ deep-link into Fee Desk ${JSON.stringify(op)}`);
     await p.click('#favList .hit'); await p.waitForTimeout(200);
     const t = await p.evaluate(() => { const e = document.getElementById('toast'), r = e.getBoundingClientRect(); return { top: Math.round(r.top), cls: e.className, text: e.textContent, hidden: e.hidden }; });
     ok(t.top === 0 && /sptoast/.test(t.cls) && !t.hidden && /Tap a row on Today first/.test(t.text), `${w}: no row picked -> one shared toast at the top ${JSON.stringify(t)}`);

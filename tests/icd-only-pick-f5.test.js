@@ -4,7 +4,7 @@
 // counted by code. Normal rows (r1, r5, r7) must come out exactly as on c286169: compared with tests/f5-normal-golden.json
 // (recorded on c286169; GOLDEN_WRITE=1 re-records). Synthetic data only.
 // Run: cd /workspace/pwtest && BASE=http://127.0.0.1:18995/ node <repo>/tests/icd-only-pick-f5.test.js
-// (BASE serves this repo's public/ at /medbilling-logs/ and a Fee Desk build at /delara-medbilling/)
+// (BASE serves this repo's public/ at /medbilling-logs/ and a Fee Desk build at /feedesk/)
 const fs = require('fs'), path = require('path');
 const { chromium } = require('./helpers/cr-welcome');
 const BASE = (process.env.BASE || 'http://127.0.0.1:18995/').replace(/\/?$/, '/');

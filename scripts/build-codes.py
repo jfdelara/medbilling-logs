@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Build compact fee-code lists for MedBilling Logs from MedBilling Fee Desk's bundled data.
-Source: ../delara-medbilling/public/data (codes.json = Alberta SOMB; data/prov/*.json = live provinces).
+Source: ../feedesk/public/data (codes.json = Alberta SOMB; data/prov/*.json = live provinces).
 Only jurisdictions marked live in Fee Desk's index.json are used. Held jurisdictions (BC, ON, QC, PE, NB, NS)
 are refused: the build fails if any of them would be bundled.
 Output: public/data/codes-<ID>.json = {"meta": {...credit...}, "codes": [[code, description, feeLabel], ...]}
 and public/data/codes-index.json. Fee labels follow Fee Desk's display (units as printed, no conversion)."""
 import json, os, re, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, '..', 'delara-medbilling', 'public', 'data'))
+SRC = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, '..', 'feedesk', 'public', 'data'))
 OUT = os.path.join(ROOT, 'public', 'data')
 HELD = {'BC', 'ON', 'QC', 'PE', 'NB', 'NS'}
 # held but still listed (no data) so a user's saved province setting and typed codes keep working

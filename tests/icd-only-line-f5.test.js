@@ -1,7 +1,7 @@
 // MBL-F5: a row with an ICD-only line ({c:'', dx:'218'}) must keep it when the Fee code(s) cell is edited or a Fee Desk
 // pick comes back; each code keeps its own Dx (matched by code, never by position); the grid shows no leading comma.
 // Synthetic data only. Run: cd /workspace/pwtest && BASE=http://127.0.0.1:18995/ node <repo>/tests/icd-only-line-f5.test.js
-// (BASE serves this repo's public/ at /medbilling-logs/ and a Fee Desk build at /delara-medbilling/)
+// (BASE serves this repo's public/ at /medbilling-logs/ and a Fee Desk build at /feedesk/)
 const { chromium } = require('./helpers/cr-welcome');
 const BASE = (process.env.BASE || 'http://127.0.0.1:18995/').replace(/\/?$/, '/');
 const LOGS = BASE + 'medbilling-logs/', PIN = '48203917';
