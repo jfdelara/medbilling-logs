@@ -1,0 +1,120 @@
+name: Rebuild Logs data from Fee Desk
+
+# Fee Desk's Friday data update sends a `feedesk-data-updated` repository_dispatch after it has published new data.
+# repository_dispatch runs only from the default branch, so this does nothing until it is merged.
+# Steps: check out Logs + the Fee Desk commit -> regenerate the Logs data -> run tests -> bump the service-worker cache ->
+# open a PR with the result -> deploy the Cloudflare Pages build (main only).
+on:
+  repository_dispatch:
+    types: [feedesk-data-updated]
+  workflow_dispatch:
+    inputs:
+      feedesk_repo:
+        description: 'Fee Desk repository as owner/name'
+        required: true
+      feedesk_ref:
+        description: 'Fee Desk branch, tag or sha to take the data from'
+        default: 'main'
+      dry_run:
+        description: 'Rebuild and test only: no PR, no deploy'
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'tests/test_*.py'
+      - '.github/workflows/feedesk-data-rebuild.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feedesk-data-rebuild
+  cancel-in-progress: false
+
+jobs:
+  unit:
+    # tests of the pipeline scripts themselves: no network, no browser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci/run-tests.sh unit
+
+  rebuild:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out Fee Desk at the commit that carries the new data
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.client_payload.repo || inputs.feedesk_repo }}
+          ref: ${{ github.event.client_payload.sha || inputs.feedesk_ref }}
+          path: feedesk
+
+      - name: Regenerate Logs data, bump the cache, mirror public/ to site/
+        id: rebuild
+        run: |
+          python3 scripts/rebuild-from-feedesk.py --feedesk feedesk --date "$(date -u +%Y%m%d)" --result rebuild-result.json
+          echo "changed=$(python3 -c "import json;print(str(json.load(open('rebuild-result.json'))['changed']).lower())")" >> "$GITHUB_OUTPUT"
+
+      - name: Install Playwright for the browser smoke tests
+        if: steps.rebuild.outputs.changed == 'true'
+        run: |
+          sudo mkdir -p /workspace/pwtest && sudo chown "$USER" /workspace/pwtest
+          cd /workspace/pwtest && npm init -y >/dev/null && npm i playwright && npx playwright install --with-deps chromium
+
+      - name: Tests
+        if: steps.rebuild.outputs.changed == 'true'
+        run: scripts/ci/run-tests.sh all
+
+      - name: Build the Cloudflare bundle
+        if: steps.rebuild.outputs.changed == 'true'
+        run: python3 scripts/ci/cf-bundle.py --src public --out dist-cf
+
+      - name: Commit to a new branch and open a PR
+        id: pr
+        if: steps.rebuild.outputs.changed == 'true' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          fd_sha="$(git -C feedesk rev-parse --short HEAD)"
+          branch="data/feedesk-${fd_sha}-${GITHUB_RUN_ID}"
+          sw="$(python3 -c "import json;print(json.load(open('rebuild-result.json'))['sw_after'])")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add public site
+          git commit -m "Rebuild data from Fee Desk ${fd_sha}: ${sw}"
+          git push origin "$branch"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          { echo "Logs data regenerated from Fee Desk commit \`${fd_sha}\` (${GITHUB_SERVER_URL}/${{ github.event.client_payload.repo || inputs.feedesk_repo }}/commit/${fd_sha})."; echo
+            echo "Service-worker cache: \`${sw}\`"; echo; echo "Changed data files:"; python3 -c "import json;[print('- '+f) for f in json.load(open('rebuild-result.json'))['files']]"; echo
+            echo "Tests passed: python unit tests, 6 node tests, Playwright smoke (grid-v9f, entry-window-v9t)."; } > pr-body.md
+          gh pr create --base "${{ github.event.repository.default_branch }}" --head "$branch" --title "Logs data from Fee Desk ${fd_sha}" --body-file pr-body.md
+
+      - name: Deploy to Cloudflare Pages (main only)
+        # This step is the gate for "do not deploy": it cannot run from any branch except main.
+        if: github.ref == 'refs/heads/main' && steps.pr.outputs.sha != '' && inputs.dry_run != true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets are not set"; exit 1
+          fi
+          npx --yes wrangler@3 pages deploy dist-cf --project-name medibrisa-logs --branch main --commit-dirty=true
+          want=$(grep -o "const V = '[^']*'" dist-cf/sw.js | head -1)
+          for i in 1 2 3 4 5 6; do
+            got=$(curl -fsS "https://logs.medibrisa.com/sw.js?cb=$RANDOM" | grep -o "const V = '[^']*'" | head -1 || true)
+            [ "$got" = "$want" ] && { echo "live: $got"; exit 0; }
+            sleep 10
+          done
+          echo "::error::logs.medibrisa.com is not serving $want"; exit 1
