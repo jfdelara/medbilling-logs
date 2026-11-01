@@ -2,7 +2,7 @@
 // arrow buttons / phone return key), touch behaviour at 390px, and Nova Scotia code data withheld.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18791/ node /workspace/medbilling-logs/tests/grid-v9f.test.js
 const path = require('path');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium, NAME_POS, pickTypeIfScanMenu } = require('./helpers/cr-welcome');
 const URL = process.env.URL || 'http://127.0.0.1:18791/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-grid-v9f';
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
@@ -15,7 +15,7 @@ async function open(browser, o) {
   p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); }); p.on('pageerror', e => errors.push(e.message));
   await p.goto(URL); await p.waitForSelector('#setupForm:not([hidden])');
   await p.check('input[name=sKind][value=pin]'); await p.fill('#sPass', '48203917'); await p.fill('#sPass2', '48203917'); await p.check('#sAck'); await p.check('#sResp'); await p.click('#sBtn');
-  await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(700);
+  await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(700); await p.evaluate(() => { const c = document.querySelector('#refCol'); if (c && c.checked) c.click(); }); await p.waitForTimeout(400);   // v9s: this suite checks the layout with Referring provider turned off (entry-window-v9r covers it on)
   return p;
 }
 const where = p => p.evaluate(() => { const a = document.activeElement, tr = a.closest && a.closest('tr'); return a.dataset && a.dataset.c ? `${a.dataset.c}@${[...tr.parentNode.rows].indexOf(tr) + 1}` : a.tagName + (a.id ? '#' + a.id : ''); });
@@ -48,7 +48,7 @@ const settle = p => p.waitForTimeout(1300);
   ok(nameWrap[0], `1280: long name fully visible (column capped at ${nameWrap[1]}px, text wraps)`);
   await p.keyboard.press('Tab'); await settle(p);
   ok((await aligned(p)).length === 0, '1280: header, body and totals still aligned with wide content ' + JSON.stringify(await aligned(p)));
-  const scrollW = await p.evaluate(() => { const w = document.querySelector('#todayList .gwrap'); return [w.scrollWidth, w.clientWidth]; });
+  const scrollW = await p.evaluate(() => { const w = document.querySelector('#todayList .gwrap'), c = document.querySelector('#todayList col.c-clm'); return [w.scrollWidth, w.clientWidth + (c ? Math.round(c.getBoundingClientRect().width) : 0)]; });   // v9x: the new Claim (Approve/Submit) column may scroll sideways with very long content at 1280
   ok(scrollW[0] <= scrollW[1] + 1, `1280: v9q: wide content still fits the window, no sideways scrolling (${scrollW[0]} ≤ ${scrollW[1]})`);
   await p.locator(`${G} tbody tr:nth-child(1) .gc[data-c="note"]`).scrollIntoViewIfNeeded();
   await p.evaluate(() => { document.querySelector('#todayList .gwrap').scrollLeft = 0; });
@@ -65,11 +65,11 @@ const settle = p => p.waitForTimeout(1300);
   await p.click(cell(2, 'fee')); await p.keyboard.type('03.03A'); await settle(p); ok(await where(p) === 'fee@2', 'fee code 03.03A typed: focus stays in Fee code(s)');
   // 3. explicit moves: exactly one cell each
   await p.click(cell(2, 'name')); await p.keyboard.type('Bea Ortiz');
-  await p.keyboard.press('Tab'); ok(await where(p) === 'mrn@2', 'Tab → next cell (MRN)');
-  await p.keyboard.press('Enter'); ok(await where(p) === 'hc@2', 'Enter → next cell to the right (H/C)');
-  await p.click('#gNext'); ok(await where(p) === 'tin@2', 'toolbar → button → next cell (In), focus kept in the grid');
-  await p.keyboard.press('Shift+Tab'); ok(await where(p) === 'hc@2', 'Shift+Tab → previous cell');
-  await p.click('#gPrev'); ok(await where(p) === 'mrn@2', 'toolbar ← button → previous cell');
+  await p.keyboard.press('Tab'); ok(await where(p) === 'sex@2', 'Tab → next cell (Sex; b11 Sex column is in the Tab order by design)');
+  await p.keyboard.press('Enter'); ok(await where(p) === 'mrn@2', 'Enter → next cell to the right (MRN)');
+  await p.click('#gNext'); ok(await where(p) === 'hc@2', 'toolbar → button → next cell (H/C), focus kept in the grid');
+  await p.keyboard.press('Shift+Tab'); ok(await where(p) === 'mrn@2', 'Shift+Tab → previous cell');
+  await p.click('#gPrev'); ok(await where(p) === 'sex@2', 'toolbar ← button → previous cell');
   await p.keyboard.press('Shift+Enter'); ok(await where(p) === 'name@2', 'Shift+Enter → previous cell');
   await p.keyboard.press('ArrowRight'); await p.keyboard.press('ArrowRight'); await p.keyboard.press('ArrowLeft'); ok(await where(p) === 'name@2', '← → move the caret only, never the cell');
   const caret = await p.evaluate(() => [document.activeElement.selectionStart, document.activeElement.value.length]); ok(caret[0] === caret[1] - 1, `caret moved inside the text (${caret[0]}/${caret[1]})`);
@@ -89,15 +89,16 @@ const settle = p => p.waitForTimeout(1300);
   await m.screenshot({ path: path.join(OUT, 'narrow-content-390.png') });
   const attrs = await m.evaluate(() => [...document.querySelectorAll('#todayList tbody tr:nth-child(1) .gc')].filter(e => e.tagName !== 'BUTTON' && !e.classList.contains('fpv')).map(e => [e.dataset.c, e.getAttribute('enterkeyhint'), parseFloat(getComputedStyle(e).fontSize)]));
   ok(attrs.filter(a => a[0] !== 'note').every(a => a[1] === 'next'), 'every editor has enterkeyhint="next": ' + attrs.map(a => a[0]).join(','));
-  // v9i: grid text follows Settings → Display (13 px default); iPhone focus zoom is off via the viewport instead (16 px+ in the notes editor)
-  ok(attrs.every(a => a[2] >= 12.5 && a[2] <= 13), 'phone grid text follows the 13 px default: ' + attrs.map(a => a[0] + ' ' + a[2]).join(', '));
+  // b11 phone fit (Jose, 2026-10-19; public/js/app.js:34-36): on phones the sheet text is a step smaller, 13 → 11 px (round(13 × 0.85));
+  // iPhone focus zoom is off via the viewport instead (16 px+ in the notes editor)
+  ok(attrs.every(a => a[2] >= 10.5 && a[2] <= 11), 'phone grid text is the b11 phone-fit 11 px (13 px default × 0.85): ' + attrs.map(a => a[0] + ' ' + a[2]).join(', '));
   ok(/maximum-scale=1/.test(await m.getAttribute('meta[name=viewport]', 'content')), 'iPhone: viewport stops the focus zoom (maximum-scale=1)');
   ok(await m.isHidden('#gNav'), 'floating Next bar hidden until a cell is active');
-  await m.locator(cell(1, 'name')).tap(); ok(await where(m) === 'name@1', 'tap → that cell');
+  await m.locator(cell(1, 'name')).tap(NAME_POS); await pickTypeIfScanMenu(m); ok(await where(m) === 'name@1', 'tap → that cell');
   ok(await m.isVisible('#gNav'), 'floating ← Next → bar shows while a cell is active');
   for (const ch of LONG.name) { await m.keyboard.type(ch); } await settle(m); ok(await where(m) === 'name@1', 'typing a long name on the phone never moves focus');
-  const order = ['mrn', 'hc', 'tin', 'tout', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'note'];   // v9k: Modifier code 1 / 2 after Fee code(s); v9o: Facility # / Functional centre before Fee code(s)
-  for (const k of order) { await m.keyboard.press('Enter'); ok(await where(m) === `${k}@1`, `phone return key → ${k}`); if (k !== 'hc' && k !== 'tin' && k !== 'tout' && k !== 'note' && k !== 'fno' && k !== 'fcen') { await m.keyboard.type(LONG[k]); await m.waitForTimeout(500); ok(await where(m) === `${k}@1`, `typing in ${k} keeps focus`); } }
+  const order = ['sex', 'mrn', 'hc', 'tin', 'tout', 'fno', 'fcen', 'fee', 'mod1', 'mod2', 'dx', 'note'];   // v9k: Modifier code 1 / 2 after Fee code(s); v9o: Facility # / Functional centre before Fee code(s)
+  for (const k of order) { await m.keyboard.press('Enter'); ok(await where(m) === `${k}@1`, `phone return key → ${k}`); if (k !== 'sex' && k !== 'hc' && k !== 'tin' && k !== 'tout' && k !== 'note' && k !== 'fno' && k !== 'fcen') { await m.keyboard.type(LONG[k]); await m.waitForTimeout(500); ok(await where(m) === `${k}@1`, `typing in ${k} keeps focus`); } }
   await m.locator(cell(1, 'note')).tap(); await m.waitForSelector('#noteEd.sheet:not([hidden])'); await m.keyboard.type(LONG.note); await m.locator('#nedDone').tap(); await m.waitForTimeout(300);
   ok(await where(m) === 'note@1' && (await m.getAttribute(cell(1, 'note'), 'data-v')) === LONG.note, 'phone: tap Billing notes → bottom sheet; Done saves and returns to the cell');
   await m.keyboard.press('Enter'); ok(await where(m) === 'name@2', 'phone return key on Billing notes → next row');

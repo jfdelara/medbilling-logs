@@ -1,7 +1,7 @@
 // Headless test for v9e easy unlock: passkey (WebAuthn PRF, Chromium virtual authenticator) and the app's
 // Face ID / quick PIN paths (Capacitor NativeBiometric plugin mocked in the page). Run like encrypted-export.test.js.
 const path = require('path');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium } = require('./helpers/cr-welcome');
 const URL = process.env.URL || 'http://localhost:18791/'; // WebAuthn needs a domain name, not an IP
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-encrypted-export';
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
@@ -71,7 +71,8 @@ async function lock(page) { await page.click('#lockNow'); await page.waitForSele
     window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios', Plugins: { NativeBiometric } };
     Object.defineProperty(document, 'visibilityState', { get: () => window.__vis || 'visible' }); Object.defineProperty(document, 'hidden', { get: () => window.__vis === 'hidden' });
   });
-  const resume = async p => { await p.evaluate(() => { window.__vis = 'hidden'; document.dispatchEvent(new Event('visibilitychange')); }); await p.waitForTimeout(150); await p.evaluate(() => { window.__vis = 'visible'; document.dispatchEvent(new Event('visibilitychange')); }); };
+  // v9v: a short tab / app switch no longer locks; "back from the background" now means a long suspension (Date.now reads 11 min later while the app checks how long it was away)
+  const resume = async p => { await p.evaluate(() => { window.__vis = 'hidden'; document.dispatchEvent(new Event('visibilitychange')); }); await p.waitForTimeout(150); await p.evaluate(() => { const n0 = Date.now; Date.now = () => n0.call(Date) + 11 * 60000; window.__vis = 'visible'; try { document.dispatchEvent(new Event('visibilitychange')); } finally { Date.now = n0; } setTimeout(() => window.__mblForeground && window.__mblForeground(), 400);   /* the native shell's appStateChange → active */ }); };
   await setup(p3, '48203917'); await p3.click('#tabs [data-tab="data"]'); await p3.waitForTimeout(300);
   ok(/Face ID/.test(await p3.textContent('#euBioLbl')) && await p3.isVisible('#euPinL'), 'app: "Unlock with Face ID" + quick PIN offered');
   await p3.waitForFunction(() => document.querySelector('#euBioOn').checked, null, { timeout: 8000 });   // v9p: on by default after setup (one confirming scan)

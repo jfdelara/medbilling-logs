@@ -3,7 +3,7 @@
 // never counted. 1280 + 390 touch.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18792/medbilling-logs/ node /workspace/medbilling-logs/tests/endless-v9h.test.js
 const path = require('path');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium, NAME_POS, pickTypeIfScanMenu } = require('./helpers/cr-welcome');
 const URL = process.env.URL || 'http://127.0.0.1:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-pick-return';
 const PIN = '48203917', N = 25;
@@ -40,7 +40,7 @@ async function run(browser, o, label, touch) {
   const r0 = await rows(p), f0 = await foot(p);
   ok(r0 === 40, `${label}: starts with ${r0} rows (25 entries + 15 empty)`);
   const name1 = `${G} tbody tr:nth-child(1) .gc[data-c="name"]`;
-  if (touch) await p.locator(name1).tap(); else await p.click(name1);
+  if (touch) await p.locator(name1).tap(NAME_POS); else await p.click(name1, NAME_POS);
   // Tab / Enter (phone return key) cell by cell through filled rows and on into empty rows, typing nothing
   // v9q: at 1280 the squeezed headers take two lines (14 px taller), so row 33 sits within the scroll-near-the-end zone; row 32
   // is still more than 5 rows from the end and outside it
@@ -55,7 +55,7 @@ async function run(browser, o, label, touch) {
   ok(info[0] === 101 && r101 >= 106 && r101 % 10 === 0, `${label}: past row 100 (at ${info[0]}) → ${r101} rows`);
   if (!touch) info = await walkTo(p, 151, 'ArrowDown', touch);
   else { // phone: tap rows near the end, then the floating Next button
-    for (let i = 0; i < 20 && (await at(p))[0] < 151; i++) { const r = await rows(p), sel = `${G} tbody tr:nth-child(${r - 3}) td.c-name`; await p.locator(sel).evaluate(el => el.scrollIntoView({ block: 'center' })); await p.waitForTimeout(60); await p.locator(sel).tap(); await p.waitForTimeout(60); }
+    for (let i = 0; i < 20 && (await at(p))[0] < 151; i++) { const r = await rows(p), sel = `${G} tbody tr:nth-child(${r - 3}) td.c-name`; await p.locator(sel).evaluate(el => el.scrollIntoView({ block: 'center' })); await p.waitForTimeout(60); await p.locator(sel).tap(NAME_POS); await pickTypeIfScanMenu(p); await p.waitForTimeout(60); }
     info = await at(p);
     const rb = await rows(p); const sel = `${G} tbody tr:nth-child(${rb - 6}) td.c-note`; await p.locator(sel).evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' })); await p.locator(sel).tap(); await p.waitForTimeout(100);
     await p.locator('#nedDone').tap(); await p.waitForTimeout(100);   // v9i: the note opens its editor; Done returns to the cell
@@ -75,7 +75,7 @@ async function run(browser, o, label, touch) {
   await p.screenshot({ path: path.join(OUT, `endless-${label}.png`) });
   // typing in a far empty row creates an entry there; the rows below stay
   const rBefore = await rows(p), far = `${G} tbody tr:nth-child(60) td.c-name`;
-  if (touch) await p.locator(far).tap(); else await p.click(far);
+  if (touch) { await p.locator(far).tap(NAME_POS); await pickTypeIfScanMenu(p); } else await p.click(far, NAME_POS);
   await p.keyboard.type('Row Sixty'); await p.keyboard.press('Tab'); await p.waitForTimeout(900);
   ok(await p.evaluate(() => { const r = document.querySelector('#todayList tbody tr:nth-child(60)'); return !!r.dataset.id && r.querySelector('.gc[data-c="name"]').value === 'Row Sixty'; }) && await rows(p) >= rBefore, `${label}: typing on row 60 saves it in place; grid keeps ${await rows(p)} rows`);
   ok(/^26 encounters/.test(await p.textContent(`${G} tfoot [data-tn]`)), `${label}: totals count the new entry only (${(await p.textContent(`${G} tfoot [data-tn]`)).trim()})`);

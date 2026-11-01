@@ -4,7 +4,7 @@
 // duplicates across the two cells; blank rows; the iOS app path (mblogs://pick?pickv=2&…&mod=…); fee and Dx picks unchanged.
 // Run: cd /workspace/pwtest && BASE=http://127.0.0.1:18792/ OUT=/workspace/artifacts/mbl-v9p node /workspace/medbilling-logs/tests/mod-pick-v9p.test.js
 const path = require('path'), fs = require('fs');
-const { chromium, webkit } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium, webkit, NAME_POS, pickTypeIfScanMenu } = require('./helpers/cr-welcome');
 const BASE = (process.env.BASE || 'http://127.0.0.1:18792/').replace(/\/?$/, '/');
 const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'delara-medbilling/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9p'; fs.mkdirSync(OUT, { recursive: true });
@@ -16,7 +16,7 @@ const G = '#todayList table.grid';
 const cell = (r, c) => `${G} tbody tr:nth-child(${r}) .gc[data-c="${c}"]`;
 const pickBtn = (r, k) => `${G} tbody tr:nth-child(${r}) .pickfd[data-kind="${k}"]:not(.fdmini)`;
 function watch(p, label) { p.on('console', m => { if (m.type() === 'error' && !/favicon|ERR_FILE_NOT_FOUND|404|Refused to apply a stylesheet/.test(m.text())) errors.push(label + ': ' + m.text()); }); p.on('pageerror', e => errors.push(label + ': ' + e.message)); }
-async function tapOrClick(pg, sel, touch) { const l = pg.locator(sel).first(); await l.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' })); await pg.waitForTimeout(60); if (touch) await l.tap(); else await l.click(); }
+async function tapOrClick(pg, sel, touch) { const l = pg.locator(sel).first(); await l.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' })); await pg.waitForTimeout(60); const pos = /data-c="name"/.test(sel) ? NAME_POS : {}; if (touch) { await l.tap(pos); if (/data-c="(name|mrn|sex)"/.test(sel)) await pickTypeIfScanMenu(pg); } else await l.click(pos); }
 const vals = (p, r) => p.evaluate(rr => Object.fromEntries(['fee', 'mod1', 'mod2', 'dx'].map(c => [c, (document.querySelector(`#todayList table.grid tbody tr:nth-child(${rr}) .gc[data-c="${c}"]`) || {}).value || ''])), r);
 async function waitFor(fn, ms) { const t = Date.now(); let v; while (Date.now() - t < (ms || 8000)) { v = await fn(); if (v) return v; await new Promise(r => setTimeout(r, 100)); } return v; }
 const msgTxt = p => p.evaluate(() => { const t = document.querySelector('#toast'), s = document.querySelector('#snack'); return (t && t.classList.contains('show') ? t.textContent : '') + (s && !s.hidden ? ' | ' + document.querySelector('#snackTxt').textContent : ''); });

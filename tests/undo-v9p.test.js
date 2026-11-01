@@ -3,7 +3,7 @@
 // no data loss (entries + audit chain), and the buttons reachable on iPhone sizes (Chromium touch + WebKit). Synthetic data only.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18792/medbilling-logs/ OUT=/workspace/artifacts/mbl-v9p node /workspace/medbilling-logs/tests/undo-v9p.test.js
 const path = require('path'), fs = require('fs');
-const { chromium, webkit } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium, webkit, NAME_POS } = require('./helpers/cr-welcome');
 const URL = process.env.URL || 'http://127.0.0.1:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9p'; fs.mkdirSync(OUT, { recursive: true });
 const PIN = '48203917';
@@ -42,7 +42,7 @@ async function setup(browser, o, label) {
     const L = '1280', p = await setup(cr, { viewport: { width: 1280, height: 800 } }, L);
     ok((await btn(p, 'gUndo')).dis && (await btn(p, 'gRedo')).dis, `${L}: Undo / Redo start disabled (nothing done yet today)`);
     // 1. typing over a cell
-    await p.click(cell(1, 'name')); await p.keyboard.press('Control+a'); await p.keyboard.type('Changed Name'); await p.keyboard.press('Enter'); await settle(p);
+    await p.click(cell(1, 'name'), NAME_POS); await p.keyboard.press('Control+a'); await p.keyboard.type('Changed Name'); await p.keyboard.press('Enter'); await settle(p);
     ok(await val(p, 1, 'name') === 'Changed Name' && /Undo: Patient name/.test((await btn(p, 'gUndo')).title), `${L}: typed over Patient name; Undo title "${(await btn(p, 'gUndo')).title}"`);
     await undoBtn(p);
     ok(await val(p, 1, 'name') === 'Patient A' && /^Undone: Patient name/.test(await toastTxt(p)), `${L}: Undo button → name back; toast "${await toastTxt(p)}"`);
@@ -112,7 +112,7 @@ async function setup(browser, o, label) {
     await redoBtn(p); const pk1 = [await val(p, 3, 'fee'), await val(p, 3, 'dx')];
     ok(/03\.04A/.test(pk[0]) && /V22\.2/.test(pk[1]) && /CMGP/.test(pk[2]) && pk0[0] === '03.03A' && pk0[1] === '650' && !/CMGP/.test(pk0[2]) && /03\.04A/.test(pk1[0]), `${L}: Fee Desk pick ${JSON.stringify(pk)} → one Undo ${JSON.stringify(pk0)} → Redo ${JSON.stringify(pk1)}`);
     // 11. 50+ steps
-    for (let i = 1; i <= 55; i++) { await p.click(cell(3, 'name')); await p.keyboard.press('Control+a'); await p.keyboard.type('Step ' + i); await p.keyboard.press('Enter'); await p.waitForTimeout(220); }
+    for (let i = 1; i <= 55; i++) { await p.click(cell(3, 'name'), NAME_POS); await p.keyboard.press('Control+a'); await p.keyboard.type('Step ' + i); await p.keyboard.press('Enter'); await p.waitForTimeout(220); }
     await p.waitForTimeout(500); const s55 = await val(p, 3, 'name');
     await p.click(cell(2, 'mrn')); for (let i = 0; i < 50; i++) { await p.keyboard.press('Control+z'); await p.waitForTimeout(90); }
     await p.waitForTimeout(1500);
@@ -133,12 +133,15 @@ async function setup(browser, o, label) {
     const g = await p.evaluate(() => { const u = document.querySelector('#gUndo').getBoundingClientRect(), r = document.querySelector('#gRedo').getBoundingClientRect(), tabs = document.querySelector('#tabs').getBoundingClientRect(), grid = document.querySelector('#todayList .gwrap').getBoundingClientRect();
       const hit = (b, x, y) => { const el = document.elementFromPoint(x, y); return !!el && (el === b || b.contains(el)); }, U = document.querySelector('#gUndo'), Rr = document.querySelector('#gRedo');
       const cx = u.left + u.width / 2, cy = u.top + u.height / 2, rx = r.left + r.width / 2;
-      return { u: [u.left, u.top, u.width, u.height].map(Math.round), r: [r.left, r.top, r.width, r.height].map(Math.round), inView: u.top >= tabs.bottom && u.bottom <= innerHeight && r.right <= innerWidth, gridTop: Math.round(grid.top),
+      return { u: [u.left, u.top, u.width, u.height].map(Math.round), r: [r.left, r.top, r.width, r.height].map(Math.round), tabsBottom: tabs.top > innerHeight / 2, inView: (tabs.top > innerHeight / 2 ? u.top >= 0 && u.bottom <= tabs.top : u.top >= tabs.bottom && u.bottom <= innerHeight) && r.right <= innerWidth, gridTop: Math.round(grid.top),
         tap44: hit(U, cx, cy - 21.5) && hit(U, cx, cy + 21.5) && hit(U, cx - 21.5, cy) && hit(Rr, rx, cy - 21.5) && hit(Rr, rx, cy + 21.5) && hit(Rr, rx + 21.5, cy), miss: [[cx, cy - 21.5], [cx, cy + 21.5], [cx - 21.5, cy], [rx, cy - 21.5], [rx + 21.5, cy]].map(([x, y]) => { const e = document.elementFromPoint(x, y); return e ? (e.id || e.className || e.tagName) : null; }), docFits: document.documentElement.scrollHeight <= innerHeight + 1 }; });
-    const want = w === 402 ? 244 : 281;
+    const want = (w === 402 ? 244 : 281) - (g.tabsBottom ? 52 : 0);
+    const wantV1b = 249;   // suite parity v1b (M6 48px shared header + M15 labelled toolbar): grid starts at 249px + batch strip at 402 and 375; Undo / Redo still share the cell-nav row
+    const wantUse = g.tabsBottom ? wantV1b : want;   // suite parity: the 52px top tab row moved to the fixed bottom bar
     ok(g.inView && g.docFits, `${L}: Undo ${JSON.stringify(g.u)} / Redo ${JSON.stringify(g.r)} on screen below the tabs, no scrolling needed`);
     ok(g.tap44, `${L}: each button answers taps across a 44 × 44 pt area` + (g.tap44 ? '' : ' ' + JSON.stringify(g.miss)));
-    ok(g.gridTop === want, `${L}: grid still starts at ${g.gridTop}px (v9o: ${want}px) — no grid space taken`);
+    const strip = await p.evaluate(() => { const x = document.querySelector('#clmBar'); if (!x || x.hidden) return 0; const cs = getComputedStyle(x); return Math.round(x.getBoundingClientRect().height + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)); });
+    ok(g.gridTop - strip === wantUse && strip <= 30, `${L}: grid still starts at ${g.gridTop}px (v1b: ${wantUse}px + v9x one-line batch strip ${strip}px) — Undo / Redo take no grid space`);
     await p.locator(cell(1, 'name')).tap(); await p.waitForTimeout(150); await p.keyboard.press('End'); await p.keyboard.type(' X'); await p.keyboard.press('Enter'); await settle(p);
     await p.evaluate(() => document.activeElement && document.activeElement.blur()); await settle(p);
     const v1 = await val(p, 1, 'name'); await p.locator('#gUndo').tap(); await settle(p);

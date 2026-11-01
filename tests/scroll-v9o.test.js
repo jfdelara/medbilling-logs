@@ -3,7 +3,7 @@
 // reached again, endless rows still add 10 at a time, and entries survive a reload. Synthetic patients only.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18792/medbilling-logs/ OUT=/workspace/artifacts/mbl-v9o node /workspace/medbilling-logs/tests/scroll-v9o.test.js
 const path = require('path'), fs = require('fs');
-const { webkit, chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { webkit, chromium, NAME_POS, pickTypeIfScanMenu } = require('./helpers/cr-welcome');
 const URL = process.env.URL || 'http://127.0.0.1:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9o'; fs.mkdirSync(OUT, { recursive: true });
 const PIN = '48203917';
@@ -29,7 +29,7 @@ const state = p => p.evaluate(([W, G]) => {
   const x = wr.left + 12, vis = []; for (const tr of t.tBodies[0].rows) { const r = tr.getBoundingClientRect(); if (r.bottom <= hr.bottom + 2 || r.top >= wr.bottom - 30) continue; const el = document.elementFromPoint(x, Math.min(r.bottom - 3, wr.bottom - 31)); if (el && tr.contains(el)) vis.push(tr.sectionRowIndex + 1); }
   const hx = document.elementFromPoint(wr.left + wr.width / 2, hr.top + hr.height / 2);
   return { sy: Math.round(scrollY), st: Math.round(w.scrollTop), first: vis[0] || 0, last: vis[vis.length - 1] || 0, rows: t.tBodies[0].rows.length,
-    headTop: Math.round(hr.top - wr.top), headShown: !!(hx && t.tHead.rows[0].contains(hx)), gridBelowTabs: wr.top >= tabs.bottom - 1, docFits: document.documentElement.scrollHeight <= innerHeight + 1 };
+    headTop: Math.round(hr.top - wr.top), headShown: !!(hx && t.tHead.rows[0].contains(hx)), gridBelowTabs: tabs.top > innerHeight / 2 ? wr.bottom <= tabs.top + 1 : wr.top >= tabs.bottom - 1,   /* suite parity: tab bar is fixed at the bottom; grid ends above it */ docFits: document.documentElement.scrollHeight <= innerHeight + 1 };
 }, [W, G]);
 const scrollRowTop = (p, n) => p.evaluate(([W, n]) => { const w = document.querySelector(W), tr = w.querySelector(`tbody tr:nth-child(${n})`), th = w.querySelector('thead tr'); w.scrollTop = tr.offsetTop - th.offsetHeight; }, [W, n]);
 async function run(browser, engine, label, o) {
@@ -76,7 +76,7 @@ async function run(browser, engine, label, o) {
   for (let i = 0; i < 6; i++) { await p.evaluate(([W]) => { const w = document.querySelector(W); w.scrollTop = w.scrollHeight; }, [W]); await p.waitForTimeout(250); }
   const r1 = (await state(p)).rows; await p.waitForTimeout(400);
   if (engine === 'webkit') await p.evaluate(([W]) => { const w = document.querySelector(W), r = w.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
-      const ev = (type, yy) => { const e = new Event(type, { bubbles: true }); Object.defineProperty(e, 'touches', { value: yy == null ? [] : [{ identifier: 1, target: w, clientX: x, clientY: yy }] }); return e; };   // WebKit here has no Touch constructor
+      const ev = (type, yy) => { const e = new Event(type, { bubbles: true }); Object.defineProperty(e, 'touches', { value: yy == null ? [] : [{ identifier: 1, target: w, clientX: x, clientY: yy }] }); Object.defineProperty(e, 'changedTouches', { value: [{ identifier: 1, target: w, clientX: x, clientY: yy == null ? y - 80 : yy }] }); return e; };   // like a real touch: changedTouches always set   // WebKit here has no Touch constructor
       w.dispatchEvent(ev('touchstart', y)); w.dispatchEvent(ev('touchmove', y - 80)); w.dispatchEvent(ev('touchend')); }, [W]);
   else { const cdp = await p.context().newCDPSession(p), x0 = Math.round(b.x + b.width / 2), y0 = Math.round(b.y + b.height / 2), T = (type, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: x0, y }] });
     await T('touchStart', y0); for (let i = 1; i <= 10; i++) await T('touchMove', y0 - i * 12); await T('touchEnd'); }
@@ -87,7 +87,7 @@ async function run(browser, engine, label, o) {
   ok(s.first === 1 && s.headShown && s.sy === 0, `${L}: back at row 1 with the header after growing to ${s.rows} rows`);
   // add a 6th entry by typing (tap on a phone), reload, unlock: nothing lost
   const nm = `${G} tbody tr:nth-child(6) td.c-name`;
-  if (o.hasTouch) await p.locator(nm).tap(); else await p.locator(nm).click(); await p.waitForTimeout(200);
+  if (o.hasTouch) { await p.locator(nm).tap(NAME_POS); await pickTypeIfScanMenu(p); } else await p.locator(nm).click(NAME_POS); await p.waitForTimeout(200);   // b11: empty cell on touch → Scan / Type menu
   await p.keyboard.type('Test Patient F'); await p.keyboard.press('Tab'); await p.keyboard.type('000000009'); await p.keyboard.press('Enter'); await p.waitForTimeout(900);
   await p.evaluate(() => document.activeElement && document.activeElement.blur()); await p.waitForTimeout(300);
   s = await state(p); ok(s.sy === 0 && s.headShown, `${L}: after typing a row the page is not left scrolled (scrollY ${s.sy}) and the header shows`);

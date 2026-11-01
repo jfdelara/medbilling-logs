@@ -1,7 +1,7 @@
 # MedBilling Logs ("MB Logs")
 
 Part of Medibrisa. A private, offline time and billing log for physicians: encounter timers,
-arrival/departure (time on site), call-backs, fee codes, photos and reports. Live: https://jfdelara.github.io/medbilling-logs/
+arrival/departure (time on site), call-backs, fee codes, photos and reports. Live: https://logs.medibrisa.com/
 
 **It is a personal time and billing log, not the patient's medical record.** Chart every encounter in the patient's chart.
 
@@ -83,12 +83,9 @@ Bump `const V` in `public/sw.js`. Then run `bash redeploy.sh` and commit the pri
 ## Spreadsheet Today (v9c)
 Today is now a full-width spreadsheet (`table.grid`, shared with History's per-day view): gridlines, grey header and row numbers, sticky header, pinned totals row, at least 15 blank rows, and inline editing with Sheets-style keyboard navigation. Typing a name/MRN into a blank row creates an encrypted not-started encounter (`status: 'new'`, `segs: []`); In starts the clock and Out stops it. Everything else on Today sits in one slim toolbar (date navigator, facility, Arrive/Depart, week totals, + Call-back, Report / share, ⋯ More). On phones the grid scrolls sideways (since v9i nothing is pinned). See `CHANGELOG-v9.md`.
 
-## Switching the web address
+## Approve/Submit, H-Link batches, staff seats (v9x test build)
+Test build only; H-Link is not connected and nothing is sent. Approve/Submit (Claim column, entry window, Claims tab) marks a claim "Queued for H-Link". Approvals close Thursday 4:00 PM (America/Edmonton); the H-Link cutoff is 4:30 PM and payment the following Friday. Later approvals roll to the next batch with a note. Holiday pay dates are flagged, never guessed. Settings → Staff seats and permissions: per provider and staff member, View / Submit (default off), all audit-logged. Logic: `public/js/claims.js`. Tests: `tests/claims-cutoff.test.js` (Node) and `tests/billing-approve-v9x.test.js` (Playwright).
 
-Fee Desk's address is the single constant `FD_ABS` in `site/js/app.js` (used when Logs is not served next to Fee Desk, i.e. on its own host).
-The same address is also hard-coded in `site/index.html` (Billing resource card, "Code data from" line, two "For help with…" lines, footer link),
-`README.md`, and `scripts/make-manual-pdf.js` (Logs' own address). Also on a move to separate hosts (feedesk / logs):
-- the `FD` same-origin pairing in `site/js/app.js` (`/medbilling-logs/` → `../delara-medbilling/`) no longer applies, so `FD_ABS` is used;
-- Fee Desk's pick-mode `okReturn()` (in the Fee Desk repo) must accept the new Logs origin;
-- `site/js/shared/move.js` export/import and the iOS wrapper URLs need the new origins;
-- bump the cache name `V` in `site/sw.js`.
+## Source of truth
+This repo holds the newest code (the v13 line, the Cloudflare Pages build served at https://logs.medibrisa.com). `public/` is the source; `site/` is an identical copy that `.github/workflows/pages.yml` publishes to gh-pages. The Cloudflare Pages copy additionally carries the `sw.js` redirect fix (Pages 308s `/index.html`); apply it when building the Cloudflare bundle.
+Fee Desk is linked at https://feedesk.medibrisa.com/ (constant `FD_ABS` in `public/js/app.js`, plus `public/index.html`). There are no github.io links.

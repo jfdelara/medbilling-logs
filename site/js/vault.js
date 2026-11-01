@@ -103,6 +103,37 @@
     };
     const p = auditQ.then(run, run); auditQ = p.catch(() => {}); return p;
   }
+  // move-prep c: Import my data (replace) in ONE IndexedDB transaction. Everything is encrypted and the audit records are chained
+  // in memory first; then enc/photo/meta/audit are written together. If anything fails, the transaction aborts and nothing changes.
+  // plan: { putEnc: [enc], delEnc: [id], delPhoto: [id], putPhoto: [{id,eid,b,m}], settings: obj|undefined, audit: [entry] }
+  let testAbortAfter = -1;   // tests only: abort the transaction after N writes (simulates a failure part-way through)
+  function replaceAll(plan) {
+    const run = async () => {
+      const k = need(); const headRec = await get('meta', 'auditHead'); let head = headRec ? await decJSON(k, headRec) : { seq: 0, hash: '0'.repeat(64) };
+      const ops = [];
+      for (const id of plan.delEnc || []) ops.push(['enc', 'delete', id]);
+      for (const id of plan.delPhoto || []) ops.push(['photo', 'delete', id]);
+      for (const e of plan.putEnc || []) { const o = await encJSON(k, e); ops.push(['enc', 'put', { id: e.id, iv: o.iv, ct: o.ct }]); }
+      for (const p of plan.putPhoto || []) { const o = await encBytes(k, unb64(p.b)); const mo = await encJSON(k, p.m || {}); ops.push(['photo', 'put', { id: p.id, eid: p.eid, iv: o.iv, ct: o.ct, miv: mo.iv, mct: mo.ct }]); }
+      if (plan.settings) { const o = await encJSON(k, plan.settings); ops.push(['meta', 'put', { id: 'settings', iv: o.iv, ct: o.ct }]); }
+      for (const entry of plan.audit || []) {
+        const rec = Object.assign({ seq: head.seq + 1, ts: Date.now(), prev: head.hash }, entry); rec.hash = await sha(canon(rec));
+        const o = await encJSON(k, rec); ops.push(['audit', 'put', { id: String(rec.seq).padStart(10, '0'), iv: o.iv, ct: o.ct }]); head = { seq: rec.seq, hash: rec.hash };
+      }
+      if ((plan.audit || []).length) { const ho = await encJSON(k, head); ops.push(['meta', 'put', { id: 'auditHead', iv: ho.iv, ct: ho.ct }]); }
+      await open();
+      await new Promise((res, rej) => {
+        const t = db.transaction(['enc', 'photo', 'meta', 'audit'], 'readwrite'); let n = 0;
+        t.oncomplete = res; t.onerror = () => rej(t.error || new Error('Import did not finish')); t.onabort = () => rej(t.error || new Error('Import did not finish, nothing was changed'));
+        // d: a put/delete that throws straight away must abort the whole transaction (otherwise the writes already queued commit).
+        // Success is reported only from oncomplete; failures only from onerror/onabort or this catch.
+        try { for (const [st, op, v] of ops) { if (n++ === testAbortAfter) { testAbortAfter = -1; t.abort(); return; } t.objectStore(st)[op](v); } }
+        catch (err) { try { t.abort(); } catch (e2) { /* already finished */ } rej(err); }
+      });
+      return ops.length;
+    };
+    const p = auditQ.then(run, run); auditQ = p.catch(() => {}); return p;
+  }
   async function loadAudit() { const k = need(); const rows = (await all('audit')).sort((a, b) => a.id < b.id ? -1 : 1); const out = []; for (const r of rows) { try { out.push(await decJSON(k, r)); } catch (e) { out.push({ seq: +r.id, broken: true }); } } return out; }
   async function verifyAudit() {
     const k = need(); const recs = await loadAudit(); const hr = await get('meta', 'auditHead'); const head = hr ? await decJSON(k, hr).catch(() => null) : null;
@@ -170,7 +201,8 @@
     for (const p of await all('photo')) { const b = await decBytes(k0, p); const m = p.mct ? await decJSON(k0, { iv: p.miv, ct: p.mct }) : {}; photos.push({ id: p.id, eid: p.eid, m, b: b64(b) }); }
     const salt = crypto.getRandomValues(new Uint8Array(16)), k = await derive(pass, salt, ITER);
     const audit = await loadAudit();
-    const o = await encJSON(k, { encounters: encs, settings, photos, audit });
+    const fdfav = typeof window !== 'undefined' && window.MBSuite ? window.MBSuite.favSnapshot(window.localStorage) : undefined;   // suite parity: Fee Desk favourites ride inside the encrypted backup
+    const o = await encJSON(k, { encounters: encs, settings, photos, audit, fdfav });
     return { app: 'MedBilling Logs', kind: 'encrypted-backup', version: 1, created: new Date().toISOString(), kdf: 'PBKDF2-SHA-256', iter: ITER, cipher: 'AES-GCM-256',
       salt: b64(salt), iv: b64(o.iv), ct: b64(new Uint8Array(o.ct)) };
   }
@@ -183,7 +215,8 @@
     const sr = await get('meta', 'settings'); const settings = sr ? await decJSON(k, sr) : {}; delete settings.abPw;
     const photos = []; for (const p of await all('photo')) { try { const b = await decBytes(k, p); const pm = p.mct ? await decJSON(k, { iv: p.miv, ct: p.mct }) : {}; photos.push({ id: p.id, eid: p.eid, m: pm, b: b64(b) }); } catch (e) { /* skip */ } }
     const audit = []; for (const r of (await all('audit')).sort((a, b) => a.id < b.id ? -1 : 1)) { try { audit.push(await decJSON(k, r)); } catch (e) { audit.push({ seq: +r.id, broken: true }); } }
-    const o = await encJSON(k, { encounters: encs, settings, photos, audit });
+    const fdfav = typeof window !== 'undefined' && window.MBSuite ? window.MBSuite.favSnapshot(window.localStorage) : undefined;   // suite parity: Fee Desk favourites ride inside the encrypted backup
+    const o = await encJSON(k, { encounters: encs, settings, photos, audit, fdfav });
     return { app: 'MedBilling Logs', kind: 'encrypted-backup', version: 1, created: new Date().toISOString(), kdf: 'PBKDF2-SHA-256', iter: m.iter, cipher: 'AES-GCM-256', auto: true,
       salt: b64(m.salt), iv: b64(o.iv), ct: b64(new Uint8Array(o.ct)) };
   }
@@ -199,5 +232,33 @@
     key = null; if (db) { db.close(); db = null; }
     await new Promise((res) => { const r = indexedDB.deleteDatabase(DB); r.onsuccess = r.onerror = r.onblocked = () => res(); });
   }
-  global.Vault = { kind, rawKey, unlockRaw, getEasy, putEasy, delEasy, saveDraft, loadDraft, clearDraft, saveUndo, loadUndo, clearUndo, exists, create, unlock, verify, lock, unlocked, loadAll, save, remove, loadSettings, saveSettings, savePhoto, loadPhoto, removePhoto, photoIds, rekey, backup, autoBackup, headSeq, openBackup, restorePhoto, wipe, appendAudit, loadAudit, verifyAudit, pruneAudit, sha, canon, ITER };
+  // ---- device store (logs-billing): the few things needed BEFORE unlock (failed-unlock counter, "a vault existed here" marker,
+  // a pending Fee Desk pick) can't use the passcode key, so they are encrypted with a random AES-GCM-256 device key that is
+  // non-extractable and kept in its own IndexedDB ('bl-device'). Nothing is kept in plaintext localStorage. Values are read
+  // into memory at start (dev.load) so callers stay synchronous; writes go to IndexedDB in the background.
+  const dev = (() => {
+    const DDB = 'bl-device'; let ddb = null, dkey = null, cache = new Map(), q = Promise.resolve();
+    const dopen = () => ddb ? Promise.resolve(ddb) : new Promise((res, rej) => { const r = indexedDB.open(DDB, 1); r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains('kv')) d.createObjectStore('kv', { keyPath: 'id' }); }; r.onsuccess = () => { ddb = r.result; ddb.onversionchange = () => { ddb.close(); ddb = null; }; res(ddb); }; r.onerror = () => rej(r.error); });
+    const dtx = (mode, fn) => dopen().then(d => new Promise((res, rej) => { const t = d.transaction('kv', mode), s = t.objectStore('kv'); let out; const r = fn(s); if (r) r.onsuccess = () => { out = r.result; }; t.oncomplete = () => res(out); t.onerror = () => rej(t.error); }));
+    async function k() {
+      if (dkey) return dkey; const r = await dtx('readonly', s => s.get('__key'));
+      if (r && r.key) return (dkey = r.key);
+      dkey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+      await dtx('readwrite', s => s.put({ id: '__key', key: dkey })); return dkey;
+    }
+    let loading = null;
+    const load = () => loading || (loading = loadNow());   // once per page; later calls share the same read
+    async function loadNow() {
+      try { const kk = await k(), rows = await dtx('readonly', s => s.getAll()); cache = new Map();
+        for (const r of rows) { if (r.id === '__key') continue; try { cache.set(r.id, await decJSON(kk, r)); } catch (e) { /* unreadable: ignore */ } } } catch (e) { /* IndexedDB unavailable: memory only */ }
+      return cache;
+    }
+    const get = id => cache.has(id) ? JSON.parse(JSON.stringify(cache.get(id))) : null;
+    function set(id, v) { cache.set(id, JSON.parse(JSON.stringify(v))); q = q.then(async () => { const o = await encJSON(await k(), v); await dtx('readwrite', s => s.put({ id, iv: o.iv, ct: o.ct })); }).catch(() => {}); return q; }
+    function remove(id) { cache.delete(id); q = q.then(() => dtx('readwrite', s => s.delete(id))).catch(() => {}); return q; }
+    const flush = () => q;
+    async function wipeDev() { cache = new Map(); dkey = null; loading = Promise.resolve(cache); if (ddb) { ddb.close(); ddb = null; } await new Promise(res => { const r = indexedDB.deleteDatabase(DDB); r.onsuccess = r.onerror = r.onblocked = () => res(); }); }
+    return { load, get, set, remove, flush, wipe: wipeDev };
+  })();
+  global.Vault = { replaceAll, _testAbortAfter: n => { testAbortAfter = n; }, dev, kind, rawKey, unlockRaw, getEasy, putEasy, delEasy, saveDraft, loadDraft, clearDraft, saveUndo, loadUndo, clearUndo, exists, create, unlock, verify, lock, unlocked, loadAll, save, remove, loadSettings, saveSettings, savePhoto, loadPhoto, removePhoto, photoIds, rekey, backup, autoBackup, headSeq, openBackup, restorePhoto, wipe, appendAudit, loadAudit, verifyAudit, pruneAudit, sha, canon, ITER };
 })(window);

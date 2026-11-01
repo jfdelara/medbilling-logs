@@ -1,14 +1,17 @@
 // Headless test for v9d encrypted exports + passphrase/passcode login.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18791/ node /workspace/medbilling-logs/tests/encrypted-export.test.js
 const path = require('path');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium, NAME_POS } = require('./helpers/cr-welcome');
 const fs = require('fs'), { execFileSync } = require('child_process');
 const URL = process.env.URL || 'http://127.0.0.1:18791/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-encrypted-export';
 const DL = path.join(OUT, 'downloads'); fs.mkdirSync(DL, { recursive: true });
 const APP_PASS = 'Quiet harbor seventy lantern';          // app passphrase (also passes the export policy, to test the "different from passcode" rule)
 const EXP_PASS = 'Velvet!Comet-39-Prairie';
-const PATIENTS = [['Sample, Maria', '100234567'], ['Doe, Jane', '100987654'], ['Testova, Olga', 'PHN 98765-4321']];
+// b11: Tab now passes the new Sex column and Referring provider / Facility # / Functional centre (all typed as null, COLS_ALL
+// order in app.js:489; ENC-1b: before this, fee/modifier/Dx/note landed one-to-three columns early); MRN 100357913 has no 4-digit run, so the "patient" rule (not the
+// sequence rule) is what rejects a password containing it
+const PATIENTS = [['Sample, Maria', '100357913'], ['Doe, Jane', '100987654'], ['Testova, Olga', 'PHN 98765-4321']];
 const pad = n => String(n).padStart(2, '0'), hm = t => { const d = new Date(t); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
 async function setup(page, kind, pass) {
@@ -18,7 +21,7 @@ async function setup(page, kind, pass) {
   await page.waitForFunction(() => !document.body.classList.contains('locked'), null, { timeout: 30000 }); await page.waitForTimeout(400);
 }
 async function typeRow(page, r, cells) {
-  await page.click(`#todayList table.grid tbody tr:nth-child(${r}) .gc[data-c="name"]`);
+  await page.click(`#todayList table.grid tbody tr:nth-child(${r}) .gc[data-c="name"]`, NAME_POS);
   for (const [c, v] of cells) { if (v !== null) await page.keyboard.type(v, { delay: 3 }); await page.keyboard.press('Tab'); await page.waitForTimeout(200); }
   await page.keyboard.press('Escape');
 }
@@ -47,9 +50,9 @@ async function exportFmt(page, fmt, pass, opts = {}) {
   await page.check('input[name=sKind][value=phrase]'); await page.fill('#sPass', 'short words'); await page.fill('#sPass2', 'short words'); await page.click('#sBtn'); ok(/12 characters/.test(await page.textContent('#sErr')), 'passphrase needs 12+ chars');
   await setup(page, 'phrase', APP_PASS); ok(true, 'passphrase with spaces accepted at setup');
   const now = Date.now();
-  await typeRow(page, 1, [['name', PATIENTS[0][0]], ['mrn', PATIENTS[0][1]], ['hc', null], ['tin', hm(now - 200 * 60000)], ['tout', hm(now - 160 * 60000)], ['fee', '03.04A'], ['mod1', 'CMGP'], ['mod2', 'BMI'], ['dx', 'V22.1'], ['note', 'Prenatal visit']]);
-  await typeRow(page, 2, [['name', PATIENTS[1][0]], ['mrn', PATIENTS[1][1]], ['hc', null], ['tin', hm(now - 150 * 60000)], ['tout', hm(now - 120 * 60000)], ['fee', '03.08A'], ['mod1', 'TELES'], ['mod2', ''], ['dx', '626.2'], ['note', 'Consult']]);
-  await typeRow(page, 3, [['name', PATIENTS[2][0]], ['mrn', PATIENTS[2][1]], ['hc', null], ['tin', hm(now - 100 * 60000)], ['tout', hm(now - 85 * 60000)], ['fee', '13.99A'], ['mod1', ''], ['mod2', 'ANE'], ['dx', '650'], ['note', 'Follow-up']]);
+  await typeRow(page, 1, [['name', PATIENTS[0][0]], ['sex', null], ['mrn', PATIENTS[0][1]], ['hc', null], ['tin', hm(now - 200 * 60000)], ['tout', hm(now - 160 * 60000)], ['ref', null], ['fno', null], ['fcen', null], ['fee', '03.04A'], ['mod1', 'CMGP'], ['mod2', 'BMI'], ['dx', 'V22.1'], ['note', 'Prenatal visit']]);
+  await typeRow(page, 2, [['name', PATIENTS[1][0]], ['sex', null], ['mrn', PATIENTS[1][1]], ['hc', null], ['tin', hm(now - 150 * 60000)], ['tout', hm(now - 120 * 60000)], ['ref', null], ['fno', null], ['fcen', null], ['fee', '03.08A'], ['mod1', 'TELES'], ['mod2', ''], ['dx', '626.2'], ['note', 'Consult']]);
+  await typeRow(page, 3, [['name', PATIENTS[2][0]], ['sex', null], ['mrn', PATIENTS[2][1]], ['hc', null], ['tin', hm(now - 100 * 60000)], ['tout', hm(now - 85 * 60000)], ['ref', null], ['fno', null], ['fcen', null], ['fee', '13.99A'], ['mod1', ''], ['mod2', 'ANE'], ['dx', '650'], ['note', 'Follow-up']]);
   ok(await page.locator('#todayList tbody tr[data-id]').count() === 3, '3 sample encounters with fake patient data');
   // dialog validation
   await page.click('#repToday'); await page.waitForSelector('#repDlg[open]');
@@ -68,7 +71,7 @@ async function exportFmt(page, fmt, pass, opts = {}) {
   await tryPw('Zzz!Mountain44', /repeat/, 'repeated chars rejected');
   await tryPw('lowercaseonly', /3 of these 4/, 'needs 3 classes or 16+');
   await tryPw('Maria#Sample-77x', /patient/, 'patient name rejected');
-  await tryPw('Kx!100234567qq', /patient/, 'patient MRN rejected');
+  await tryPw('Kx!100357913qq', /patient/, 'patient MRN rejected');
   await tryPw(APP_PASS, /different password from your app passcode/, 'app passcode rejected');
   await page.fill('#xp1', EXP_PASS); await page.fill('#xp2', EXP_PASS + 'x'); await page.click('#xpOk'); ok(/match/.test(await page.textContent('#xpErr')), 'confirm mismatch rejected');
   await page.fill('#xp1', 'Kx!Sample'); await page.waitForTimeout(150);
@@ -79,18 +82,30 @@ async function exportFmt(page, fmt, pass, opts = {}) {
   await page.screenshot({ path: path.join(OUT, 'password-dialog-strong-1280.png') });
   await page.click('#xpCancel'); await page.click('#pClose');
   // each format
-  const needles = PATIENTS.map(p => p[0]).concat(['100234567', '100987654']);
+  const needles = PATIENTS.map(p => p[0]).concat(['100357913', '100987654']);
+  const codeNeedles = ['03.04A', 'CMGP', 'BMI', 'V22.1', '03.08A', 'TELES', '626.2', '13.99A', 'ANE'];   // ENC-1b: fee codes + modifiers (+ Dx) must be in every export
   for (const fmt of ['pdf', 'docx', 'xlsx', 'csv']) {
     const r = await exportFmt(page, fmt, EXP_PASS);
     const bad = PATIENTS.some(([n, m]) => r.name.includes(n.split(',')[0]) || r.name.includes(m)) || /\s/.test(r.name);
     ok(/^MedBillingLogs_\d{4}-\d{2}-\d{2}\.zip$/.test(r.name) && !bad, `${fmt}: file name has no identifiers (${r.name})`);
-    const j = JSON.parse(execFileSync('python3', [path.join(__dirname, 'inspect_zip.py'), r.dest, EXP_PASS, needles.join('|')]).toString());
+    const j = JSON.parse(execFileSync('python3', [path.join(__dirname, 'inspect_zip.py'), r.dest, EXP_PASS, needles.concat(codeNeedles).join('|')]).toString());
     ok(j.methods.length === 1 && /AES-256/.test(j.methods[0]), `${fmt}: 7z -slt Method = ${j.methods.join(',')}`);
     ok(j.encrypted_flags.join() === '+', `${fmt}: every entry Encrypted = +`);
     ok(j.wrong_pw_fails && j.no_pw_fails, `${fmt}: extraction fails without / with a wrong password`);
     ok(j.right_pw_ok, `${fmt}: extraction succeeds with the password`);
     ok(j['valid_' + fmt] === true, `${fmt}: inner file is a valid ${fmt.toUpperCase()} (${j.entries.join(', ')})${j.sheets ? ' sheets ' + j.sheets.join('/') : ''}${j.csv_rows ? ' rows ' + j.csv_rows : ''}`);
-    ok(Object.values(j.needles_found).every(Boolean), `${fmt}: contains all rows (${JSON.stringify(j.needles_found)})`);
+    ok(needles.every(x => j.needles_found[x]), `${fmt}: contains all rows (${JSON.stringify(needles.map(x => [x, j.needles_found[x]]))})`);
+    ok(codeNeedles.every(x => j.needles_found[x]), `${fmt}: contains every fee code and modifier (${codeNeedles.filter(x => !j.needles_found[x]).join(',') || 'all found'})`);
+    if (fmt === 'csv') {   // ENC-1b: values in the right columns, not just present somewhere
+      const x = fs.mkdtempSync(path.join(require('os').tmpdir(), 'encx-'));
+      try {
+        execFileSync('7z', ['x', '-y', '-p' + EXP_PASS, '-o' + x, r.dest], { stdio: 'ignore' });
+        const rows = JSON.parse(execFileSync('python3', ['-c', 'import csv,glob,json,sys;print(json.dumps(list(csv.DictReader(open(glob.glob(sys.argv[1]+"/*.csv")[0], encoding="utf-8-sig")))))', x]).toString());
+        const got = rows.map(o => [o.patient_name, o.codes, o.modifier_1, o.modifier_2, o.diagnostic_code, o.billing_note.toLowerCase()].join('|'));
+        const want = ['Sample, Maria|03.04A|CMGP|BMI|V22.1|prenatal visit', 'Doe, Jane|03.08A|TELES||626.2|consult', 'Testova, Olga|13.99A||ANE|650|follow-up'];
+        ok(JSON.stringify(got) === JSON.stringify(want), `csv: fee / modifier 1 / modifier 2 / Dx / note in their own columns (${got.join(' ; ')})`);
+      } finally { fs.rmSync(x, { recursive: true, force: true }); }
+    }
     ok(j.entries.every(e => !PATIENTS.some(([n, m]) => e.includes(n.split(',')[0]) || e.includes(m))), `${fmt}: inner entry names have no identifiers`);
   }
   // audit log export (also encrypted)

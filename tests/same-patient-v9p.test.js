@@ -4,7 +4,7 @@
 // 44 pt button on iPhone (WebKit + Chromium touch). Synthetic data only.
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:18792/medbilling-logs/ OUT=/workspace/artifacts/mbl-v9p node /workspace/medbilling-logs/tests/same-patient-v9p.test.js
 const path = require('path'), fs = require('fs');
-const { chromium, webkit } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium, webkit, NAME_POS } = require('./helpers/cr-welcome');
 const URL0 = process.env.URL || 'http://127.0.0.1:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9p'; fs.mkdirSync(OUT, { recursive: true });
 const PIN = '48203917';
@@ -79,7 +79,7 @@ async function setup(browser, o, label) {
     ok(pk && pk.codes.map(c => c.c).join() === '03.04A' && /V22\.2/.test(JSON.stringify(pk)) && ri[2].id === id3, `${L}: Fee Desk pick lands in the same-patient row (${pk && pk.codes.map(c => c.c)}), row order kept after reload`);
     ok(ri[0].cls === 'spg spn' && ri[1].cls === 'spg spc spn' && ri[2].cls === 'spg spc', `${L}: after reload / unlock the 3 rows are still grouped`);
     // name edit: this row only, then "Apply to all"
-    await p.click(cell(1, 'name')); await p.keyboard.press('Control+a'); await p.keyboard.type('Alex Smyth'); await p.keyboard.press('Enter'); await settle(p);
+    await p.click(cell(1, 'name'), NAME_POS); await p.keyboard.press('Control+a'); await p.keyboard.type('Alex Smyth'); await p.keyboard.press('Enter'); await settle(p);
     ri = await rowInfo(p); const sn = await p.evaluate(() => ({ shown: !document.querySelector('#snack').hidden, txt: document.querySelector('#snackTxt').textContent, btn: document.querySelector('#snackUndo').textContent }));
     ok(ri[0].name === 'Alex Smyth' && ri[1].name === 'Alex Smith' && ri[2].name === 'Alex Smith', `${L}: renaming row 1 does not change the others (${ri.slice(0, 3).map(r => r.name).join(' | ')})`);
     ok(sn.shown && sn.btn === 'Apply to all 3', `${L}: offer: "${sn.txt}" [${sn.btn}]`);
@@ -101,7 +101,7 @@ async function setup(browser, o, label) {
     const dlg = await p.evaluate(() => !!document.querySelector('#editDlg[open]')); if (dlg) { await p.keyboard.press('Escape'); await p.waitForTimeout(300); }
     ok(dlg && (await rowInfo(p)).length === n0, `${L}: double-click on the selected row's number opens the details, no row added`);
     // no row without a name / MRN offers Same patient
-    await p.click(cell(6, 'name')); await p.keyboard.type('0900'.slice(0, 0)); await p.click(cell(6, 'tin')); await p.keyboard.type('0700'); await p.keyboard.press('Enter'); await settle(p);
+    await p.click(cell(6, 'name'), NAME_POS); await p.keyboard.type('0900'.slice(0, 0)); await p.click(cell(6, 'tin')); await p.keyboard.type('0700'); await p.keyboard.press('Enter'); await settle(p);
     const noSp = await p.evaluate(G => { const tr = [...document.querySelectorAll(`${G} tbody tr[data-id]`)].find(t => !t.querySelector('.gc[data-c="name"]').value && !t.querySelector('.gc[data-c="mrn"]').value); return tr ? !tr.querySelector('.spb') : 'none'; }, G);
     ok(noSp === true, `${L}: a row with no name or MRN has no Same patient button`);
     await p.context().close();
@@ -109,9 +109,14 @@ async function setup(browser, o, label) {
   for (const [engine, br] of [['chromium', cr], ['webkit', wk]]) {
     const L = `${engine} 402x874`, p = await setup(br, { viewport: { width: 402, height: 874 }, userAgent: IPHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 3 }, L);
     await p.locator(cell(1, 'mrn')).tap(); await p.waitForTimeout(250);
-    const g = await p.evaluate(G => { const b = document.querySelector(`${G} tbody tr:nth-child(1) .spb`); const r = b.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2; const hit = (x, y) => { const e = document.elementFromPoint(x, y); return !!e && (e === b || b.contains(e)); };
-      return { r: [r.left, r.top, r.width, r.height].map(Math.round), d: getComputedStyle(b).display, inView: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0, hit: hit(cx, cy - 21.5) && hit(cx, cy + 21.5) && hit(r.left + 1, cy) && hit(r.left + 43, cy), miss: [[cx, cy - 21.5], [cx, cy + 21.5], [r.left + 1, cy], [r.left + 43, cy]].map(([x, y]) => { const e = document.elementFromPoint(x, y); return e ? (e.id || e.className || e.tagName) : null; }) }; }, G);
-    ok(g.d === 'flex' && g.inView && g.r[2] >= 44 && g.r[3] >= 44 && g.hit, `${L}: tapping a cell shows ＋ same in that row's number cell, ${g.r[2]}×${g.r[3]} pt, all of it tappable, on screen (${JSON.stringify(g.r)} ${g.hit ? '' : JSON.stringify(g.miss)})`);
+    // b11 phone fit (Jose, 2026-10-19: half-height rows, public/js/app.js:34-36) + Eng ruling 2026-10-22: the visible "+ same" chip stays
+    // small inside the 20 px row; its invisible touch area (the button box) is >= 44 px wide, exactly the row height, and overlaps no neighbour
+    const g = await p.evaluate(G => { const tr = document.querySelector(`${G} tbody tr:nth-child(1)`), b = tr.querySelector('.spb'), th = tr.querySelector('th.rn'), r = b.getBoundingClientRect(), rr = tr.getBoundingClientRect(), tc = th.getBoundingClientRect(), chip = b.querySelector('b').getBoundingClientRect();
+      const nb = [tr.querySelector('td.c-name'), tr.nextElementSibling && tr.nextElementSibling.querySelector('th.rn'), tr.previousElementSibling && tr.previousElementSibling.querySelector('th.rn'), document.querySelector(`${G} thead th`)].filter(Boolean).map(e => e.getBoundingClientRect());
+      const ov = nb.map(n => Math.max(0, Math.min(r.right, n.right) - Math.max(r.left, n.left)) * Math.max(0, Math.min(r.bottom, n.bottom) - Math.max(r.top, n.top))).filter(a => a > 0.5).length;
+      const hit = (x, y) => { const e = document.elementFromPoint(x, y); return !!e && (e === b || b.contains(e)); };
+      return { r: [r.left, r.top, r.width, r.height].map(x => Math.round(x * 10) / 10), rowH: Math.round(rr.height * 10) / 10, d: getComputedStyle(b).display, inView: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0, inCell: r.left >= tc.left - 0.5 && r.right <= tc.right + 0.5 && r.top >= rr.top - 0.5 && r.bottom <= rr.bottom + 0.5, ov, chip: [chip.width, chip.height].map(Math.round), hit: hit(r.left + 1, r.top + 1) && hit(r.right - 1, r.bottom - 1) && hit(r.left + 1, r.bottom - 1) && hit(r.right - 1, r.top + 1) }; }, G);
+    ok(g.d === 'flex' && g.inView && g.r[2] >= 44 && Math.abs(g.r[3] - g.rowH) <= 0.5 && g.inCell && g.ov === 0 && g.hit && g.chip[1] <= g.rowH, `${L}: tapping a cell shows ＋ same (chip ${g.chip.join('×')}); touch area ${g.r[2]}×${g.r[3]} = row height ${g.rowH}, all tappable, zero overlap with neighbouring rows / cells (${g.ov}) (${JSON.stringify(g.r)}) inCell=${g.inCell} hit=${g.hit}`);
     await p.locator(`${G} tbody tr:nth-child(1) .spb`).tap(); await settle(p);
     const ri = await rowInfo(p);
     ok(ri.length === 4 && ri[1].name === 'Alex Smith' && ri[1].cls === 'spg spc', `${L}: tap → new Alex Smith row under row 1 (${ri.map(r => r.name).join(' | ')})`);

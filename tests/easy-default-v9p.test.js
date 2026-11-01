@@ -2,7 +2,7 @@
 // kept in localStorage so it survives reloads, like the real Keychain) and a Chromium virtual platform authenticator.
 // Run: cd /workspace/pwtest && URL=http://localhost:18792/medbilling-logs/ OUT=/workspace/artifacts/mbl-v9p node /workspace/medbilling-logs/tests/easy-default-v9p.test.js
 const path = require('path'), fs = require('fs');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium } = require('./helpers/cr-welcome');
 const URL = process.env.URL || 'http://localhost:18792/medbilling-logs/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-v9p'; fs.mkdirSync(OUT, { recursive: true });
 const PIN = '48203917';
@@ -12,7 +12,8 @@ const isLocked = p => p.evaluate(() => document.body.classList.contains('locked'
 const unlocked = p => p.waitForFunction(() => !document.body.classList.contains('locked'), null, { timeout: 15000 });
 const prompts = p => p.evaluate(() => +localStorage.getItem('nb.prompts') || 0);
 const nbSet = (p, k, v) => p.evaluate(([k, v]) => localStorage.setItem(k, v), [k, v]);
-const resume = async p => { await p.evaluate(() => { window.__vis = 'hidden'; document.dispatchEvent(new Event('visibilitychange')); }); await p.waitForTimeout(200); await p.evaluate(() => { window.__vis = 'visible'; document.dispatchEvent(new Event('visibilitychange')); }); };
+// v9v: a short tab / app switch no longer locks; "back from the background" now means a long suspension (Date.now reads 11 min later while the app checks how long it was away)
+const resume = async p => { await p.evaluate(() => { window.__vis = 'hidden'; document.dispatchEvent(new Event('visibilitychange')); }); await p.waitForTimeout(200); await p.evaluate(() => { const n0 = Date.now; Date.now = () => n0.call(Date) + 11 * 60000; window.__vis = 'visible'; try { document.dispatchEvent(new Event('visibilitychange')); } finally { Date.now = n0; } setTimeout(() => window.__mblForeground && window.__mblForeground(), 400);   /* the native shell's appStateChange → active */ }); };
 const focusId = p => p.evaluate(() => document.activeElement && document.activeElement.id);
 const audit = p => p.evaluate(async () => (await Vault.loadAudit ? await Vault.loadAudit() : []).map(a => a.note || '').join(' | ')).catch(() => '');
 async function appCtx(browser, label, init) {

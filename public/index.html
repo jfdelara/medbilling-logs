@@ -17,6 +17,11 @@
 <link rel="icon" href="icons/icon-192.png" sizes="192x192">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="clinical-resources/cr.css">
+<link rel="stylesheet" href="css/shared/favrow.css">
+<link rel="stylesheet" href="css/shared/suite.css">
+<link rel="stylesheet" href="css/shared/spui.css">
+<link rel="stylesheet" href="css/shared/move.css">
 </head>
 <body class="locked">
 <section id="lock" class="lock" aria-label="Locked">
@@ -66,9 +71,11 @@
   <div class="pb1"><b id="pbName">Time period</b><span class="pbh" id="pbHrs"></span><span class="pbu" id="pbUnits"></span></div>
   <div class="pb2"><div class="pbtrack" aria-hidden="true"><div class="pbfill" id="pbFill"></div></div><span class="pbr" id="pbLeft"></span></div>
 </div>
-<nav class="tabs" id="tabs" role="tablist">
+<nav class="tabs sptabs" id="tabs" role="tablist" aria-label="MedBilling Logs sections">
+  <button type="button" role="tab" data-tab="fav" aria-selected="false"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/></svg><span>Favourites</span></button>
   <button type="button" role="tab" data-tab="today" class="on" aria-selected="true"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="12" cy="15" r="1.6"/></svg><span>Today</span></button>
   <button type="button" role="tab" data-tab="history" aria-selected="false"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4.5l3 2"/></svg><span>History</span></button>
+  <button type="button" role="tab" data-tab="claims" aria-selected="false"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="M8 9l2 2 4-4M8 15h8"/></svg><span>Claims</span></button>
   <button type="button" role="tab" data-tab="res" aria-selected="false"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/></svg><span>Resources</span></button>
   <button type="button" role="tab" data-tab="data" aria-selected="false"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg><span>Settings</span></button>
 </nav>
@@ -80,10 +87,11 @@
     <div class="card warnbox" id="abRemind" hidden><p class="small" id="abRemindTxt"></p><div class="rowbtns"><button type="button" class="primary" id="abRemindNow">Back up now</button><button type="button" class="ghost" id="abRemindLater">Later</button></div><p class="bkx small" data-k="auto"></p></div>
     <div class="tbar" id="tbar" role="toolbar" aria-label="Day tools">
       <div class="tgrp dnav">
-        <button type="button" class="tb ic" id="dPrev" aria-label="Previous day" title="Previous day">‹</button>
+        <button type="button" class="tb ic sptb" id="dPrev" aria-label="Previous day" title="Previous day"><span class="sti" aria-hidden="true">‹</span><span class="stl">Prev</span></button>
         <label class="tb dpick" title="Choose a day"><span id="dLbl">Today</span><input type="date" id="dPick" aria-label="Choose a day"></label>
-        <button type="button" class="tb ic" id="dNext" aria-label="Next day" title="Next day">›</button>
-        <button type="button" class="tb" id="dToday" title="Back to today">Today</button>
+        <button type="button" class="tb ic sptb" id="dNext" aria-label="Next day" title="Next day"><span class="sti" aria-hidden="true">›</span><span class="stl">Next</span></button>
+        <button type="button" class="tb sptb" id="dToday" aria-label="Go to today" title="Back to today"><span class="stl">Today</span></button>
+        <button type="button" class="tb ic sptb" id="ptSearchBtn" aria-label="Search: find a patient" title="Find a patient (name, MRN / PHN or ULI)" aria-haspopup="dialog"><span class="sti" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></svg></span><span class="stl">Search</span></button>
       </div>
       <div class="tgrp site">
         <button type="button" class="tb fac" id="osFac" aria-label="Choose facility"><span class="fl">Facility</span> <b id="osFacName">Choose…</b></button>
@@ -91,20 +99,21 @@
         <span class="tinfo" id="osInfo" aria-live="polite"></span>
       </div>
       <div class="tgrp cnav" role="group" aria-label="Move between cells">
-        <button type="button" class="tb ic" id="gPrev" aria-label="Previous cell" title="Previous cell (Shift+Tab)">←</button>
-        <button type="button" class="tb ic" id="gNext" aria-label="Next cell" title="Next cell (Tab or Enter)">→</button>
+        <button type="button" class="tb ic sptb" id="gPrev" aria-label="Previous cell" title="Previous cell (Shift+Tab)"><span class="sti" aria-hidden="true">←</span><span class="stl">Cell</span></button>
+        <button type="button" class="tb ic sptb" id="gNext" aria-label="Next cell" title="Next cell (Tab or Enter)"><span class="sti" aria-hidden="true">→</span><span class="stl">Cell</span></button>
       </div>
       <div class="tgrp udo" role="group" aria-label="Undo and redo">
-        <button type="button" class="tb ic ub" id="gUndo" aria-label="Undo" title="Undo (Ctrl+Z / ⌘Z)" disabled>↶</button>
-        <button type="button" class="tb ic ub" id="gRedo" aria-label="Redo" title="Redo (Shift+Ctrl+Z / ⇧⌘Z)" disabled>↷</button>
+        <button type="button" class="tb ic ub sptb" id="gUndo" aria-label="Undo" title="Undo (Ctrl+Z / ⌘Z)" disabled><span class="sti" aria-hidden="true">↶</span><span class="stl">Undo</span></button>
+        <button type="button" class="tb ic ub sptb" id="gRedo" aria-label="Redo" title="Redo (Shift+Ctrl+Z / ⇧⌘Z)" disabled><span class="sti" aria-hidden="true">↷</span><span class="stl">Redo</span></button>
       </div>
+      <div class="tgrp crg"><button type="button" class="tb ic sptb" id="crOpen" aria-label="Clinical resources" aria-controls="crDrawer" aria-expanded="false" title="Clinical resources (R)"><span class="sti" aria-hidden="true">📚</span><span class="stl">Resources</span></button></div>
       <span class="tinfo wk" id="wkTot"></span>
       <span class="tsp" aria-hidden="true"></span>
       <div class="tgrp acts">
-        <button type="button" class="tb" id="cbBtn">+ Call-back</button>
-        <button type="button" class="tb" id="repToday">Report / share</button>
+        <button type="button" class="tb sptb" id="cbBtn" aria-label="Add call-back"><span class="sti" aria-hidden="true">+</span><span class="stl">Call-back</span></button>
+        <button type="button" class="tb sptb" id="repToday" aria-label="Report / share"><span class="sti" aria-hidden="true">⇪</span><span class="stl">Report</span></button>
         <span class="menuwrap">
-          <button type="button" class="tb" id="moreBtn" aria-haspopup="true" aria-expanded="false" aria-controls="moreMenu">⋯ More</button>
+          <button type="button" class="tb sptb" id="moreBtn" aria-label="More day actions" aria-haspopup="true" aria-expanded="false" aria-controls="moreMenu"><span class="sti" aria-hidden="true">⋯</span><span class="stl">More</span></button>
           <span class="menu" id="moreMenu" hidden>
             <button type="button" id="manualBtn">+ Add past entry</button>
             <button type="button" id="tlToday">Timeline</button>
@@ -118,9 +127,13 @@
       </div>
     </div>
     <button type="button" class="premstrip" id="premStrip" hidden></button>
+    <div id="clmBar" class="clmbar" role="status" aria-live="polite" hidden></div>
     <div id="todayList" class="gridbox"></div>
   </section>
 
+  <section id="tab-fav" class="panel fdfav" hidden>
+    <div id="favPane" aria-live="polite"></div>
+  </section>
   <section id="tab-history" class="panel" hidden>
     <div class="wstrip" id="wsHist"></div>
     <div id="histList"></div>
@@ -131,17 +144,38 @@
     </div>
   </section>
 
+  <section id="tab-claims" class="panel" hidden>
+    <div class="clmhead">
+      <button type="button" class="ghost" id="clmPrev" aria-label="Previous batch week">‹</button>
+      <div class="clmtt"><h2 id="clmWk">Batch</h2><p class="small muted" id="clmWkSub"></p></div>
+      <button type="button" class="ghost" id="clmNext" aria-label="Next batch week">›</button>
+      <button type="button" class="ghost" id="clmThis">This week</button>
+    </div>
+    <div class="clmbatch" id="clmBatch"></div>
+    <p class="small muted clmtestnote">Thursday report. Test build: H-Link is not connected. “Queued for H-Link” only marks a claim as approved; nothing is sent.</p>
+    <div id="clmRep"></div>
+  </section>
+
   <section id="tab-res" class="panel" hidden>
     <p class="small muted">Official sites, opened in your browser. Opening a link sends no app data (no referrer, nothing attached). The app locks when you leave it.</p>
     <div class="card res"><h3>AHS &amp; zones</h3><ul><li><a href="https://www.albertahealthservices.ca/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health Services (AHS)</a></li><li><a href="https://www.albertahealthservices.ca/zones/zones.aspx" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AHS zones overview</a></li><li><a href="https://www.albertahealthservices.ca/zones/south-zone.aspx" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AHS South Zone</a></li><li><a href="https://www.albertahealthservices.ca/zones/calgary-zone.aspx" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AHS Calgary Zone</a></li><li><a href="https://www.albertahealthservices.ca/zones/central-zone.aspx" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AHS Central Zone</a></li><li><a href="https://www.albertahealthservices.ca/zones/edmonton-zone.aspx" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AHS Edmonton Zone</a></li><li><a href="https://www.albertahealthservices.ca/zones/north-zone.aspx" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AHS North Zone</a></li><li><a href="https://www.albertahealthservices.ca/assets/zone/ahs-map-ahs-zones.pdf" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AHS zone map (PDF)</a></li><li><a href="https://covenanthealth.ca/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Covenant Health</a></li><li><a href="https://albertapcns.ca/pcn" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Primary Care Networks (Alberta)</a></li><li><a href="https://www.alberta.ca/about-primary-health-care" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">About primary health care (Alberta.ca)</a></li></ul></div>
-    <div class="card res"><h3>Billing</h3><ul><li><a href="https://tp8p7c4vwr-del.github.io/delara-medbilling/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">MedBilling Fee Desk</a><span class="resd">Companion app: look up billing (fee) codes and ICD-9 diagnostic codes, with fees, rules and notes. Works offline; nothing you type is sent.</span></li><li><a href="https://www.alberta.ca/fees-health-professionals" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: Fees information for health professionals (SOMB)</a></li><li><a href="https://open.alberta.ca/publications/somb-2026-04-01" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Schedule of Medical Benefits, April 1, 2026 (Open Government)</a></li><li><a href="https://www.alberta.ca/bulletins-for-health-professionals" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: Bulletins for health professionals</a></li><li><a href="https://www.alberta.ca/h-link-electronic-claims-system" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: H-Link electronic claims system</a></li><li><a href="https://open.alberta.ca/publications/physician-s-resource-guide" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: Physician's resource guide (claims)</a></li><li><a href="https://www.alberta.ca/health-professional-business-forms" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: Health professional business forms</a></li><li><a href="https://www.albertadoctors.org/practice/billing-support/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Billing Support</a></li><li><a href="https://www.albertadoctors.org/practice/physician-compensation/fee-for-service/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Fee-for-service resources</a></li><li><a href="https://apps.albertadoctors.org/fee-navigator/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Fee Navigator</a></li><li><a href="https://www.albertadoctors.org/news/publications/billing-tips/documentation-is-important/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA billing tip: Documentation is important</a></li><li><a href="https://apps.albertadoctors.org/fee-navigator/billing-tips/documentation-pca-billing-tip" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Fee Navigator tip: Documentation (PCPCM)</a></li><li><a href="https://apps.albertadoctors.org/fee-navigator/billing-tips/phone-call-documentation" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Fee Navigator tip: Phone call documentation</a></li><li><a href="https://www.albertadoctors.org/news/publications/billing-corner/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Billing Corner</a></li><li><a href="https://www.albertadoctors.org/media/zolbejry/pcpcm-operations-manual-v42-jan-9.pdf" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA PCPCM operations manual (PDF)</a></li><li><a href="https://www.alberta.ca/health-professionals-audit-and-compliance-assurance" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: Audit and compliance assurance</a></li><li><a href="https://www.cmpa-acpm.ca/en/membership/protection-for-members/principles-of-assistance/billing-investigations" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Billing investigations</a></li></ul></div>
+    <div class="card res"><h3>Billing</h3><ul><li><a href="https://feedesk.medibrisa.com/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">MedBilling Fee Desk</a><span class="resd">Companion app: look up billing (fee) codes and ICD-9 diagnostic codes, with fees, rules and notes. Works offline; nothing you type is sent.</span></li><li><a href="https://www.alberta.ca/fees-health-professionals" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: Fees information for health professionals (SOMB)</a></li><li><a href="https://open.alberta.ca/publications/somb-2026-04-01" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Schedule of Medical Benefits, April 1, 2026 (Open Government)</a></li><li><a href="https://www.alberta.ca/bulletins-for-health-professionals" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: Bulletins for health professionals</a></li><li><a href="https://www.alberta.ca/h-link-electronic-claims-system" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: H-Link electronic claims system</a></li><li><a href="https://open.alberta.ca/publications/physician-s-resource-guide" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: Physician's resource guide (claims)</a></li><li><a href="https://www.alberta.ca/health-professional-business-forms" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: Health professional business forms</a></li><li><a href="https://www.albertadoctors.org/practice/billing-support/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Billing Support</a></li><li><a href="https://www.albertadoctors.org/practice/physician-compensation/fee-for-service/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Fee-for-service resources</a></li><li><a href="https://apps.albertadoctors.org/fee-navigator/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Fee Navigator</a></li><li><a href="https://www.albertadoctors.org/news/publications/billing-tips/documentation-is-important/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA billing tip: Documentation is important</a></li><li><a href="https://apps.albertadoctors.org/fee-navigator/billing-tips/documentation-pca-billing-tip" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Fee Navigator tip: Documentation (PCPCM)</a></li><li><a href="https://apps.albertadoctors.org/fee-navigator/billing-tips/phone-call-documentation" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Fee Navigator tip: Phone call documentation</a></li><li><a href="https://www.albertadoctors.org/news/publications/billing-corner/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Billing Corner</a></li><li><a href="https://www.albertadoctors.org/media/zolbejry/pcpcm-operations-manual-v42-jan-9.pdf" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA PCPCM operations manual (PDF)</a></li><li><a href="https://www.alberta.ca/health-professionals-audit-and-compliance-assurance" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Health: Audit and compliance assurance</a></li><li><a href="https://www.cmpa-acpm.ca/en/membership/protection-for-members/principles-of-assistance/billing-investigations" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Billing investigations</a></li></ul></div>
     <div class="card res"><h3>Regulatory &amp; privacy</h3><ul><li><a href="https://cpsa.ca/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">College of Physicians &amp; Surgeons of Alberta (CPSA)</a></li><li><a href="https://oipc.ab.ca/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Office of the Information and Privacy Commissioner of Alberta (OIPC)</a></li><li><a href="https://www.alberta.ca/health-information-act" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Health Information Act (Alberta.ca)</a></li><li><a href="https://kings-printer.alberta.ca/1266.cfm?page=H05.cfm" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Health Information Act (Alberta King's Printer)</a></li><li><a href="https://cpsa.ca/physicians/standards-of-practice/patient-record-retention/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CPSA: Patient Record Retention standard</a></li><li><a href="https://www.cmpa-acpm.ca/en/advice-publications/browse-articles/2003/a-matter-of-records-retention-and-transfer-of-clinical-records" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Records retention, access, security and transfer</a></li><li><a href="https://www.cmpa-acpm.ca/en/advice-publications/handbooks/electronic-records-handbook/destroying-and-disposing-of-records" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Destroying and disposing of electronic records</a></li><li><a href="https://www.cmpa-acpm.ca/en/advice-publications/browse-articles/2011/using-clinical-photography-and-video-for-educational-purposes" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Clinical photography and video</a></li><li><a href="https://www.cmpa-acpm.ca/en/advice-publications/browse-articles/2023/recording-clinical-encounters-with-patients-what-physicians-need-to-know" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Recording clinical encounters</a></li><li><a href="https://www.cmpa-acpm.ca/en/advice-publications/browse-articles/2013/protecting-patient-privacy-when-delivering-care-virtually" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Protecting patient privacy in virtual care (email/text)</a></li><li><a href="https://www.cmpa-acpm.ca/en/advice-publications/browse-articles/2019/texting-safely-about-patient-care" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Texting safely about patient care</a></li><li><a href="https://www.cmpa-acpm.ca/en/advice-publications/browse-articles/2018/the-new-reality-of-reporting-a-privacy-breach" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Reporting a privacy breach</a></li><li><a href="https://www.cmpa-acpm.ca/en/education-events/good-practices/professionalism-ethics-and-wellness/privacy-and-confidentiality" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Privacy and confidentiality</a></li><li><a href="https://www.albertadoctors.org/resource-centre/privacy-resources/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA Privacy resources</a></li><li><a href="https://www.albertadoctors.org/resource-centre/privacy-resources/health-information-act/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA: Health Information Act overview</a></li><li><a href="https://www.albertadoctors.org/resource-centre/privacy-resources/acceptable-use-of-email-policy/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA: Acceptable Use of Email Policy</a></li><li><a href="https://www.albertadoctors.org/resource-centre/privacy-resources/breach-management-policy/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA: Breach Management Policy</a></li><li><a href="https://www.albertadoctors.org/resource-centre/privacy-resources/five-steps-to-minimize-privacy-breaches/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA: Five Steps to Minimize Privacy Breaches</a></li><li><a href="https://www.albertadoctors.org/resource-centre/privacy-resources/notification-to-patients-affected-by-privacy-breach/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA: Notification to patients affected by a breach</a></li><li><a href="https://www.albertadoctors.org/resource-centre/privacy-resources/assessing-risk-and-implementing-safeguards/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA: Assessing Risk and Implementing Safeguards</a></li><li><a href="https://www.albertadoctors.org/resource-centre/privacy-resources/faq-privacy-agreements/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA: FAQ Privacy agreements</a></li><li><a href="https://www.albertadoctors.org/media/x5cf23al/collection-use-and-disclosure-policy.pdf" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA: Collection, Use, Disclosure and Disposal policy template (PDF)</a></li></ul></div>
     <div class="card res"><h3>Professional</h3><ul><li><a href="https://www.albertadoctors.org/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Alberta Medical Association (albertadoctors.org)</a></li><li><a href="https://www.cmpa-acpm.ca/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Canadian Medical Protective Association (CMPA)</a></li><li><a href="https://www.cmpa-acpm.ca/en/education-events/good-practices/physician-patient/documentation-and-record-keeping" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Documentation and record keeping</a></li><li><a href="https://www.cmpa-acpm.ca/en/advice-publications/handbooks/electronic-records-handbook" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Electronic records handbook</a></li><li><a href="https://www.cmpa-acpm.ca/en/membership/protection-for-members/principles-of-assistance/practice-management-and-business-matters-overview-of-cmpa-assistance" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">CMPA: Practice management and business matters (assistance)</a></li><li><a href="https://www.albertadoctors.org/practice/learning-development/online-training/privacy-training/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">AMA: Free privacy training</a></li></ul></div>
     <p class="small muted">Each link was checked and loaded on 2026-10-04 (MT). Websites change; if a link moves, search the organization's main site.</p>
   </section>
 
   <section id="tab-data" class="panel" hidden>
+    <div class="spset" id="spSettings">
+      <h3>Settings</h3>
+      <div class="sprow"><label for="spProv">Province</label><select id="spProv" aria-label="Province or territory" disabled><option>Alberta</option></select></div>
+      <div class="sprow"><label for="spSkill">Specialty</label><select id="spSkill" aria-label="Specialty (from Fee Desk)" disabled><option>—</option></select></div>
+      <div class="sprow"><label>Text size</label><div class="spbtns"><button type="button" id="spSizeGo">Text size…</button></div></div>
+      <div class="sprow"><label>Backup</label><div class="spbtns"><button type="button" id="spBackup">Back up (includes favourites)</button><button type="button" id="spFdSet">Change in Fee Desk</button></div></div>
+      <p class="sphelp">Province and specialty come from Fee Desk on this device (change them there). The encrypted backup includes your Fee Desk favourites; a restore adds them back only on a device that has none.</p>
+    </div>
     <div class="card helpcard"><h3>Help</h3><button type="button" class="linkbtn manlink">Help / User manual</button><span class="small muted"> How to use the app, step by step. Works offline.</span></div>
+    <div class="card" id="crProfCard"><h3>Profile &amp; defaults</h3><p class="small muted">Provider type, specialty, province and preferences used by Clinical resources and fee code shortlists. Preferences only; no patient information.</p><button type="button" class="ghost" id="crProfile">Edit profile &amp; defaults</button></div>
     <div class="card dispcard" id="dispCard">
       <h3>Display</h3>
       <div class="tsize" role="group" aria-labelledby="tsLbl">
@@ -151,26 +185,45 @@
       </div>
       <label class="fld">Font style
         <select id="dispFont"><option value="system">System default</option><option value="rounded">Rounded</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label>
-      <p class="small muted">Text size and font apply to the spreadsheet (rows and columns grow with the text) and the rest of the app. Built-in fonts only, nothing is downloaded. Saved on this device only; no patient data. <button type="button" class="linkbtn sm" id="dispReset">Reset to default</button></p>
+      <p class="small muted">Text size and font apply to the spreadsheet (rows and columns grow with the text) and the rest of the app. Built-in fonts only, nothing is downloaded. Saved encrypted with your passcode on this device; no patient data. <button type="button" class="linkbtn sm" id="dispReset">Reset to default</button></p>
     </div>
     <div class="card">
       <h3>Defaults</h3>
       <div class="two">
         <label class="fld">Default setting
           <select id="defSetting"><option value="H">Hospital</option><option value="C">Clinic</option></select></label>
-        <label class="fld">Fee schedule
+        <label class="fld">Province
           <select id="defProv"></select></label>
       </div>
+    </div>
+    <div class="card" id="seatCard">
+      <h3>Staff seats and permissions</h3>
+      <p class="small muted">Each provider decides, per staff member, who may <b>View</b> and who may <b>Submit</b> (Approve/Submit) that provider’s billings. Everything starts Off; staff without View see nothing. Stored encrypted with your passcode.</p>
+      <label class="fld">Using this device as
+        <select id="seatSel"></select></label>
+      <div class="fphead"><b>Providers</b> <button type="button" class="linkbtn sm" id="seatAddProv">Add provider…</button></div>
+      <ul id="seatProvs" class="seatprovs"></ul>
+      <div class="fphead"><b>Staff</b> <button type="button" class="linkbtn sm" id="seatAddStaff">Add staff seat…</button> <span class="small muted" id="seatStaffN"></span></div>
+      <div class="permwrap"><table id="permTab" class="permtab"></table></div>
+      <p class="small muted" id="permNote"></p>
+    </div>
+    <div class="card" id="clmLogCard">
+      <h3>Audit log: approvals and permissions <button type="button" class="linkbtn sm" id="clmLogRefresh">Refresh</button></h3>
+      <p class="small muted">Who did what, and when (Mountain Time). Part of the tamper-evident, encrypted audit log.</p>
+      <div id="clmLog" class="clmlog"></div>
     </div>
     <div class="card" id="fpCard">
       <h3>Facility # and Functional centre</h3>
       <label class="chk small"><input type="checkbox" id="fcCarry" checked> New rows start with the Facility # and Functional centre picked last that day</label>
+      <label class="chk small"><input type="checkbox" id="refCol" checked> Show the Referring provider column (name and practitioner ID) on the Today and History sheets and in the entry window</label>
       <div class="fphead"><b>Favourite facilities</b> <span class="small muted">(shown first in the Facility # list)</span> <button type="button" class="linkbtn sm" id="fnoFavAdd">Add…</button></div>
       <div id="fnoFavList" class="fpslist"></div>
       <div class="fphead"><b>Recent facilities</b> <button type="button" class="linkbtn sm" id="fnoRecClear">Clear</button></div>
       <div id="fnoRecList" class="fpslist"></div>
       <div class="fphead"><b>Favourite functional centres</b> <span class="small muted">(Select Favourite… in the list)</span></div>
       <div id="fcenFavList" class="fpchips"></div>
+      <div class="fphead"><b>Favourite referring providers</b> <span class="small muted">(☆ in the Referring provider list; shown first)</span></div>
+      <div id="refFavList" class="fpslist"></div>
       <p class="small muted credit" id="fpSrc"></p>
     </div>
     <div class="card">
@@ -201,7 +254,7 @@
       <h3>Lock</h3>
       <label class="fld">Auto-lock after inactivity
         <select id="autolock"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select></label>
-      <p class="small muted">The app also locks whenever it goes to the background. Timers keep counting while locked.</p>
+      <p class="small muted">Switching tabs or apps does not lock it; it locks after this much inactivity (time away counts) or when you tap Lock now. Timers keep counting while locked.</p><p class="small muted" id="persistInfo"></p>
       <div class="rowbtns"><button type="button" class="ghost" id="lockNow2">Lock now</button><button type="button" class="ghost" id="chPass">Change passcode / passphrase</button></div>
       <p class="warnbox small">A forgotten passcode means the data can't be recovered. Keep an encrypted backup.</p>
       <div class="easybox" id="euCard" hidden>
@@ -287,7 +340,7 @@
     <div class="card">
       <h3>Fee code sources</h3>
       <div id="credits" class="small muted"></div>
-      <p class="small muted">Code data from <a href="https://tp8p7c4vwr-del.github.io/delara-medbilling/" rel="noopener noreferrer">MedBilling Fee Desk</a>, bundled in the app. Always confirm codes and fees in the official schedule.</p>
+      <p class="small muted">Code data from <a href="https://feedesk.medibrisa.com/" rel="noopener noreferrer">MedBilling Fee Desk</a>, bundled in the app. Always confirm codes and fees in the official schedule.</p>
       <p class="small muted" id="dxCredit">Diagnostic code suggestions: Alberta Health, Alberta Health diagnostic codes: claims assessment (ICD-9 supplement, as of 2018-01-18). Contains information licensed under the Open Government Licence – Alberta. Data via MedBilling Fee Desk. Any code can also be typed as free text.</p>
     </div>
   </section>
@@ -298,9 +351,9 @@
   <p class="small muted units-note" id="unitsNote"></p>
   <p class="small muted">Time log only. Confirm time-based billing rules in your own schedule (e.g. Alberta SOMB) before submitting claims.</p>
   <p class="small muted">Passcode-locked and encrypted on this device. No accounts, analytics or trackers. Nothing is sent anywhere.</p>
-  <p class="small muted fdhelp">For help with medical billing codes and diagnostic codes (ICD-9 / ICD-10), use <a href="https://tp8p7c4vwr-del.github.io/delara-medbilling/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">MedBilling Fee Desk</a></p>
+  <p class="small muted fdhelp">For help with medical billing codes and diagnostic codes (ICD-9 / ICD-10), use <a href="https://feedesk.medibrisa.com/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">MedBilling Fee Desk</a></p>
   <p class="small muted"><button type="button" class="linkbtn manlink">Help / User manual</button></p>
-  <p class="small muted">Part of JFdeLara's Studio · <a href="https://tp8p7c4vwr-del.github.io/delara-medbilling/" rel="noopener noreferrer">MedBilling Fee Desk</a></p>
+  <p class="small muted">Part of Medibrisa · <a href="https://feedesk.medibrisa.com/" rel="noopener noreferrer">MedBilling Fee Desk</a></p>
   <div class="copyright">© 2026 MedBilling Logs. All rights reserved. This app is protected by copyright. Reproduction or duplication without permission is an infringement.</div>
 </footer>
 
@@ -361,11 +414,11 @@
       <div class="fld"><span class="fldl" id="eFcenL">Functional centre</span><button type="button" class="fpbtn" id="eFcen" aria-labelledby="eFcenL eFcen" aria-haspopup="dialog"><span class="muted">Choose…</span></button></div>
     </div>
     <div class="codebox notshift">
-      <div class="codehead"><span class="fldl">Fee codes and diagnostic codes (optional)</span><select id="eProv" aria-label="Fee schedule"></select></div>
+      <div class="codehead"><span class="fldl">Fee code and Diagnosis (ICD-9) (optional)</span><select id="eProv" aria-label="Province"></select></div>
       <div id="eCodes" class="chips"></div>
       <div class="cdrow">
-        <div class="cdcol"><label class="fldl" for="eCodeQ">Billing code</label><input id="eCodeQ" type="search" maxlength="60" placeholder="Code or words" autocomplete="off" enterkeyhint="search"><a class="fdl" id="eCodeFD" href="https://tp8p7c4vwr-del.github.io/delara-medbilling/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Look up in Fee Desk</a></div>
-        <div class="cdcol"><label class="fldl" for="eDxQ">Diagnostic code (ICD-9)</label><input id="eDxQ" class="dxin" type="search" maxlength="40" placeholder="Code or words" autocomplete="off" autocapitalize="characters" enterkeyhint="search"><a class="fdl" id="eDxFD" href="https://tp8p7c4vwr-del.github.io/delara-medbilling/#/icd9" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Look up in Fee Desk</a></div>
+        <div class="cdcol"><label class="fldl" for="eCodeQ">Billing code</label><input id="eCodeQ" type="search" maxlength="60" placeholder="Search codes" autocomplete="off" enterkeyhint="search"><a class="fdl" id="eCodeFD" href="https://feedesk.medibrisa.com/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Look up in Fee Desk</a></div>
+        <div class="cdcol"><label class="fldl" for="eDxQ">Diagnosis (ICD-9)</label><input id="eDxQ" class="dxin" type="search" maxlength="40" placeholder="Search codes" autocomplete="off" autocapitalize="characters" enterkeyhint="search"><a class="fdl" id="eDxFD" href="https://feedesk.medibrisa.com/#/icd9" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">Look up in Fee Desk</a></div>
       </div>
       <div id="eCodeRes" class="codres"></div>
       <div id="eDxRes" class="codres dxres"></div>
@@ -374,7 +427,7 @@
         <label class="fld">Modifier code(s) 2<input id="eMod2" maxlength="80" placeholder="Separate with commas" autocomplete="off" autocorrect="off" spellcheck="false" autocapitalize="characters"></label>
       </div>
       <div id="eModU" class="emodu" hidden></div>
-      <p class="small muted fdhelp">For help with medical billing codes and diagnostic codes (ICD-9 / ICD-10), use <a href="https://tp8p7c4vwr-del.github.io/delara-medbilling/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">MedBilling Fee Desk</a></p>
+      <p class="small muted fdhelp">For help with medical billing codes and diagnostic codes (ICD-9 / ICD-10), use <a href="https://feedesk.medibrisa.com/" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">MedBilling Fee Desk</a></p>
       <p class="small muted credit" id="eCredit"></p>
     </div>
     <div id="eNotesSlot"></div>
@@ -411,11 +464,25 @@
   </form>
 </dialog>
 
+<dialog id="ewDlg" class="ewdlg" aria-labelledby="ewT">
+  <form class="ewbox" id="ewForm" autocomplete="off" novalidate>
+    <header class="ewhd">
+      <div class="ewtt"><h3 id="ewT">Entry</h3><p class="small muted" id="ewSub"></p></div>
+      <div class="ewnav"><button type="button" class="ghost" id="ewWide" aria-pressed="false" title="Wider window (one row per billing line). You can also drag the corner to resize.">⇔ Wider</button><button type="button" class="ghost" id="ewPrev" title="Save and go to the previous patient (Alt+↑)">‹ Previous</button><button type="button" class="ghost" id="ewNext" title="Save and go to the next patient (Alt+↓)">Next ›</button></div>
+    </header>
+    <div class="ewbody" id="ewBody"></div>
+    <p class="ewerr" id="ewErr" role="alert"></p>
+    <div class="ewtot" aria-live="polite"><span>Expected total from Alberta Health <small class="muted">(estimate)</small></span><b id="ewTotal" class="mono">–</b></div>
+    <footer class="ewft"><span class="small muted ewkeys">Tab moves between fields · ▾ or Alt+↓ shows choices · Ctrl+Enter saves · N (outside a field) opens a new entry</span><button type="button" class="ghost" id="ewCancel">Cancel</button><button type="button" class="apv" id="ewApv">Approve/Submit</button><button type="submit" id="ewSave">Save</button></footer>
+  </form>
+  <div class="ewmenu" id="ewMenu" role="listbox" hidden></div>
+</dialog>
 <dialog id="rowMenu" class="sheet" aria-labelledby="rmTitle">
   <div class="dlg">
     <h3 id="rmTitle">Entry</h3>
     <p class="small muted" id="rmSub"></p>
     <div class="rmlist">
+      <button type="button" data-rmi="ew"><span class="ei" aria-hidden="true">⤢</span>Open entry window (every field)</button>
       <button type="button" data-rmi="start"><span class="ei" aria-hidden="true">▶</span>Start timer now</button>
       <button type="button" data-rmi="pause"><span class="ei" aria-hidden="true">❚❚</span>Pause</button>
       <button type="button" data-rmi="resume"><span class="ei" aria-hidden="true">▶</span><span id="rmResumeL">Resume</span></button>
@@ -493,6 +560,22 @@
     <div class="dlgbtns"><span></span><button type="button" class="ghost" id="xpCancel">Cancel</button><button type="submit" class="primary" id="xpOk">Encrypt file</button></div>
   </form>
 </dialog>
+<dialog id="clmDlg" class="sheet" aria-labelledby="clmDlgT">
+  <div class="dlg">
+    <h3 id="clmDlgT">Claim</h3>
+    <div id="clmDlgB" class="small"></div>
+    <div class="dlgbtns"><button type="button" class="dangerbtn" id="clmWd">Withdraw approval</button><button type="button" class="primary" id="clmClose">Close</button></div>
+  </div>
+</dialog>
+<dialog id="refDlg" class="sheet refdlg" aria-labelledby="refDlgT">
+  <div class="dlg">
+    <h3 id="refDlgT">Referring provider</h3>
+    <p class="small muted">Search favourites and recent referring providers by name or Alberta practitioner ID, or type a new one as “Name 123456789”. ☆ adds a favourite.</p>
+    <input type="search" id="refQ" placeholder="Name or practitioner ID" autocomplete="off" spellcheck="false" aria-label="Search referring providers">
+    <div id="refList" class="reflist" role="listbox" aria-label="Referring providers"></div>
+    <div class="dlgbtns"><span></span><button type="button" class="ghost" id="refClose">Close</button></div>
+  </div>
+</dialog>
 <dialog id="askDlg">
   <form method="dialog" class="dlg" id="askForm" autocomplete="off">
     <h3 id="askTitle"></h3>
@@ -565,7 +648,7 @@
 <dialog id="manDlg" class="mandlg" aria-labelledby="manTitle">
   <div class="manhead"><h2 id="manTitle">MedBilling Logs · User manual</h2><button type="button" class="lockbtn" id="manClose">Close</button></div>
   <div class="man" id="manBody">
-    <p class="manlead">A private time and billing log for physicians. Everything stays on this device, encrypted with your passcode or passphrase. This manual works offline. Version 9q (October 2026).</p>
+    <p class="manlead">A private time and billing log for physicians. Everything stays on this device, encrypted with your passcode or passphrase. This manual works offline. Version 9v (October 2026).</p>
     <nav class="mantoc" aria-label="Contents">
       <a href="#m-start" data-go="m-start">1. Getting started, passcode and easy unlock</a>
       <a href="#m-per" data-go="m-per">2. The time-period bar</a>
@@ -582,8 +665,9 @@
       <a href="#m-audit" data-go="m-audit">13. Audit log</a>
       <a href="#m-ret" data-go="m-ret">14. Retention and backups</a>
       <a href="#m-bk" data-go="m-bk">15. Automatic backups</a>
-      <a href="#m-priv" data-go="m-priv">16. Privacy, the law and your responsibility</a>
-      <a href="#m-faq" data-go="m-faq">17. FAQ and troubleshooting</a>
+      <a href="#m-data" data-go="m-data">16. Your data: Export my data, Import my data and moving</a>
+      <a href="#m-priv" data-go="m-priv">17. Privacy, the law and your responsibility</a>
+      <a href="#m-faq" data-go="m-faq">18. FAQ and troubleshooting</a>
     </nav>
 
     <section id="m-start">
@@ -676,7 +760,7 @@
 
     <section id="m-enc">
       <h3>4. Encounters: the spreadsheet</h3>
-      <p>Today is a spreadsheet, like Excel or Google Sheets: gridlines, a grey header row and row numbers, light zebra striping, a sticky header, and a totals row pinned at the bottom. Columns: <b>#</b> · <b>Patient name</b> · <b>MRN / PHN</b> · <b>H/C</b> (Hospital or Clinic) · <b>In</b> · <b>Out</b> · <b>Min</b> · <b>Units</b> · <b>Facility #</b> · <b>Functional centre</b> · <b>Fee code(s)</b> · <b>Modifier code 1</b> · <b>Modifier code 2</b> · <b>Dx (ICD-9)</b> · <b>Billing notes</b> · <b>⋯</b>. There are always at least 15 blank rows below your entries, and the grid never runs out (see <i>Rows never run out</i> below). Every change saves encrypted straight away; there are no pop-up forms for normal work.</p>
+      <p>Today is a spreadsheet, like Excel or Google Sheets: gridlines, a grey header row and row numbers, light zebra striping, a sticky header, and a totals row pinned at the bottom. Columns: <b>#</b> · <b>Patient name</b> · <b>MRN / PHN</b> · <b>H/C</b> (Hospital or Clinic) · <b>In</b> · <b>Out</b> · <b>Min</b> · <b>Units</b> · <b>Facility #</b> · <b>Functional centre</b> · <b>Fee code</b> · <b>Modifier code 1</b> · <b>Modifier code 2</b> · <b>Diagnosis (ICD-9)</b> · <b>Billing notes</b> · <b>⋯</b>. There are always at least 15 blank rows below your entries, and the grid never runs out (see <i>Rows never run out</i> below). Every change saves encrypted straight away; there are no pop-up forms for normal work.</p>
       <p><b>The totals (v9p).</b> The totals row shows the number of encounters, the total time in hours and minutes (<b>8 h 52</b>) and the units, then <b>8 h 52 min · 36 units</b>. Under it, one plain line each for Hospital, Clinic, Call-backs and On site, and for every time period with logged time, for example <b>Hospital 8 h 52 min · 36 units</b>, <b>Day 17 min · 1 unit</b>, <b>Evening 8 h 35 min · 35 units</b> (Night, Late evening, Weekend or Holiday as they apply). On a phone each is on its own line; they stay in view when you scroll sideways. The Min column of each row still shows minutes. Each row's units are counted on its own, so the period lines can add up to a unit more or less than the total.</p>
       <ol>
         <li><b>New patient:</b> type a name or MRN/PHN in the first blank row. That creates the encounter (not started yet).</li>
@@ -684,19 +768,19 @@
         <li><b>Stop:</b> type the time in <b>Out</b> (an Out earlier than In means after midnight), or tap <b>■</b> in the Out cell.</li>
         <li><b>H/C:</b> tap (or press Space, or type H or C) to switch between Hospital and Clinic.</li>
         <li><b>Codes:</b> type or paste fee and ICD-9 codes (several separated by commas). Select the cell and tap <b>↗</b> (or <b>ⓘ</b> beside a code) to pick in MedBilling Fee Desk: tap a code there and it comes straight back into that cell (see <a href="#m-codes" data-go="m-codes">section 8</a>).</li>
-        <li><b>Modifiers:</b> type modifier codes in <b>Modifier code 1</b> and <b>Modifier code 2</b> (right after Fee code(s)). Each cell takes several codes separated by commas or spaces; they are saved in capitals, separated by ", ", with duplicates removed (e.g. <i>cmgp bmi</i> → <i>CMGP, BMI</i>). See <i>Modifier codes</i> below.</li>
+        <li><b>Modifiers:</b> type modifier codes in <b>Modifier code 1</b> and <b>Modifier code 2</b> (right after Fee code). Each cell takes several codes separated by commas or spaces; they are saved in capitals, separated by ", ", with duplicates removed (e.g. <i>cmgp bmi</i> → <i>CMGP, BMI</i>). See <i>Modifier codes</i> below.</li>
       </ol>
       <h4 id="m-mod">Modifier codes and roomy code cells (v9k)</h4>
-      <p>Two <b>Modifier code</b> columns sit between <b>Fee code(s)</b> and <b>Dx (ICD-9)</b>. Use them however suits your billing: for example, modifiers for the first fee code in <b>Modifier code 1</b> and for the second in <b>Modifier code 2</b>, or simply all of them in one cell.</p>
+      <p>Two <b>Modifier code</b> columns sit between <b>Fee code</b> and <b>Diagnosis (ICD-9)</b>. Use them however suits your billing: for example, modifiers for the first fee code in <b>Modifier code 1</b> and for the second in <b>Modifier code 2</b>, or simply all of them in one cell.</p>
       <ul>
-        <li><b>Room for several codes:</b> Fee code(s), Modifier code 1, Modifier code 2 and Dx are wide enough for about 15 characters (three or four codes) before anything wraps, at every text size. When a cell holds more, the column widens up to a maximum and then the codes wrap onto more lines and the row grows taller; nothing is ever cut off. On a phone a code column stops at about 60 % of the screen and wraps from there. Each of these cells holds up to 200 characters (v9m), enough for 20 or more codes with their commas. In <b>Dx</b> each code sits beside a fee code in order; more Dx than fee codes are kept too, after the paired ones (v9m).</li>
-        <li><b>A bigger cell while you type:</b> the code cell you are editing opens to at least two lines, and keeps growing as you add codes. Tab, Enter or the keyboard's <b>Next</b> moves Fee code(s) → Modifier code 1 → Modifier code 2 → Dx, like any other cell. On a phone, a code cell you tap that is partly off the edge slides fully into view.</li>
+        <li><b>Room for several codes:</b> Fee code, Modifier code 1, Modifier code 2 and Dx are wide enough for about 15 characters (three or four codes) before anything wraps, at every text size. When a cell holds more, the column widens up to a maximum and then the codes wrap onto more lines and the row grows taller; nothing is ever cut off. On a phone a code column stops at about 60 % of the screen and wraps from there. Each of these cells holds up to 200 characters (v9m), enough for 20 or more codes with their commas. In <b>Dx</b> each code sits beside a fee code in order; more Dx than fee codes are kept too, after the paired ones (v9m).</li>
+        <li><b>A bigger cell while you type:</b> the code cell you are editing opens to at least two lines, and keeps growing as you add codes. Tab, Enter or the keyboard's <b>Next</b> moves Fee code → Modifier code 1 → Modifier code 2 → Dx, like any other cell. On a phone, a code cell you tap that is partly off the edge slides fully into view.</li>
         <li>Modifiers are encrypted with the entry and appear in <b>History</b>, the entry details (a <b>Modifiers</b> line) and the edit form (<b>Modifier code(s) 1 / 2</b>), every report (PDF, Word, Excel, CSV columns <i>modifier_1</i> and <i>modifier_2</i>), encrypted backups and the audit log. Entries made before version 9k simply have empty Modifier cells, and totals are not affected.</li>
         <li><b>Modifiers from Fee Desk (v9p):</b> select a Modifier code 1 or Modifier code 2 cell and tap <b>↗</b> (or ⋯ → Pick modifier in Fee Desk). Fee Desk opens straight on its Modifiers tab; tap a modifier to send it, or ＋ several and Send. They come back into the cell you started from (from Modifier code 2 they go to Modifier code 2), added after what is already there; a modifier already in the row is not added twice. Undo takes the whole pick back in one step.</li>
         <li>Type modifiers, or bring them back from Fee Desk with fee and ICD-9 codes in one go (see <a href="#m-multi">Several codes at once</a>, v9l / v9m): Modifier code 1 gets the modifiers for the row's first fee code, Modifier code 2 those for its second or later fee code. Always confirm modifiers and their rules in the current Alberta Schedule of Medical Benefits.</li>
       </ul>
       <h4 id="m-fac">Facility # and Functional centre (v9o)</h4>
-      <p>Two columns sit just before <b>Fee code(s)</b>: <b>Facility #</b> (the Alberta Health facility number for the claim) and <b>Functional centre</b>.</p>
+      <p>Two columns sit just before <b>Fee code</b>: <b>Facility #</b> (the Alberta Health facility number for the claim) and <b>Functional centre</b>.</p>
       <ul>
         <li><b>Facility #:</b> tap the cell (or press Space / F4) for a searchable list of the official Alberta Health facility listing (411 facilities, "Facility and Functional Centre Definitions and Facility Listing", effective 1 July 2026). Type a number, a name or a town. ★ marks a favourite; favourites and your recent picks are listed first. A number not in the list can still be typed (marked "entered by you"). The source and date are shown at the bottom of the list.</li>
         <li><b>Functional centre:</b> the same kind of list as in Med Access: <i>Type something to search…</i>, <i>Select Favourite…</i>, <i>Edit/Search…</i>, then <b>CLNC</b> (clinic), <b>D</b> (day), <b>N</b> (night), <b>EMRG</b> (emergency), <b>MED</b> (medicine), <b>SURG</b> (surgery).</li>
@@ -721,6 +805,8 @@
         <li>Not tracked: the 4-units-per-hour rule (GR 15.13.10) and call-back maximums (GR 15.11). Always check the current SOMB before you bill.</li>
       </ul>
       <h4>Rows never run out</h4>
+      <p><b>Entry window (v9t):</b> tap or click a row number (or ⋯ → Open entry window, or Ctrl+Enter in a cell) to see every field of that encounter in one window. On a phone it fills the screen. <b>Claim details</b> at the top: patient name, ULI / PHN or MRN, sex, billing physician, specialty (skill code), BA number, Hospital / Clinic, referring physician and practitioner ID, Facility #, Functional centre and site. <b>Billing line 1, 2, 3…</b> each have a fee code (with its description and Fee Desk search), an ICD-9 diagnosis, calls, the service date (pick another day if the service was on a different day; it starts as the encounter day), and modifiers with a units box beside each (for example TEV 04); “+ Modifier” adds another, “+ Add billing line” adds lines without limit and ✕ removes one. Each line shows its <b>expected payment</b> from Alberta Health, and the <b>expected total</b> sits at the very bottom. These are estimates from the bundled fee schedule data (base or specialty rate × calls, plus the modifier effects), not an assessment. <b>Visit details</b>: admitted on, visit #, In / Out, original facility and location, newborn, hold reason, claim flags and the internal note. A <b>Checks</b> box updates as you type (for example a code that usually needs a referring physician, a sex-specific code, a missing time modifier or units, or a missing diagnosis). These are reminders, not rules. “⇔ Wider” (or dragging the window’s corner on a computer) makes the window wider; then each billing line fits on one row: code, diagnosis, calls, date, modifiers and units, expected pay. Every field has a ▾ list of choices; you can always type instead. Save keeps the changes, Cancel drops them, Previous / Next save and move to the next patient. The billing physician, skill and BA number you last used are filled in for new entries. Paid, balance, write-off, insurer and claim status come later with claim submission.</p>
+      <p><b>Referring provider (v9r):</b> Settings → Facility # and Functional centre → Show the Referring provider column. Type the name and practitioner ID (for example "Dr. A. Smith, 12345"). On by default (turn it off here); names already saved stay with each entry and appear in exports.</p>
       <p><b>On a computer (v9q):</b> the app uses the whole browser window. The spreadsheet shares the width out so every column, from Patient name to Billing notes, is on screen without scrolling sideways (from about 1280 px wide; Edge or Chrome on a 1920 × 1080 or 1366 × 768 monitor). On a wide monitor the name, facility, code and notes columns get the extra room; In, Out, Min, Units, H/C and MRN stay compact. In a smaller window those text columns wrap onto two or more lines instead (a code is never split), and column headers may take two lines. iPhone and iPad look the same as before.</p>
       <p>The grid is endless. Whenever the cell you are in is within 5 rows of the last row, 10 more blank rows are added below; it doesn't matter how you got there (Tab, Enter, ↓, the <b>Next</b> bar, or a tap), and you don't have to type anything. Scrolling down adds up to 30 more by itself; then the footer (units rule, disclaimers, Fee Desk link and this manual) shows after the last row, and scrolling on past it adds 10 more rows each time (v9o). Row numbers simply continue (… 40, 41, 42 …), and your cursor, the text you're typing and the order of rows stay exactly where they were.</p>
       <ul>
@@ -729,7 +815,7 @@
         <li>The extra rows last until you lock the app or reload; after that the grid starts again with your entries plus the usual blank rows.</li>
       </ul>
       <h4>Columns fit what you type</h4>
-      <p>Each column widens to fit its longest entry (and narrows again when you shorten it). Past a sensible maximum, <b>Patient name</b>, <b>Fee code(s)</b>, the two <b>Modifier code</b> columns, <b>Dx</b> and <b>Billing notes</b> wrap onto more lines and the row grows taller, so nothing is cut off. Every column also has a minimum width wide enough for its usual content (about 10 digits for MRN/PHN, about 15 characters (several codes) for Fee code(s), each Modifier column and Dx, 5 for times, 4 for minutes and units); these widths grow and shrink with the text size (see <i>Settings → Display</i> below).</p>
+      <p>Each column widens to fit its longest entry (and narrows again when you shorten it). Past a sensible maximum, <b>Patient name</b>, <b>Fee code</b>, the two <b>Modifier code</b> columns, <b>Dx</b> and <b>Billing notes</b> wrap onto more lines and the row grows taller, so nothing is cut off. Every column also has a minimum width wide enough for its usual content (about 10 digits for MRN/PHN, about 15 characters (several codes) for Fee code, each Modifier column and Dx, 5 for times, 4 for minutes and units); these widths grow and shrink with the text size (see <i>Settings → Display</i> below).</p>
       <p><b>Nothing is pinned on the left.</b> When the grid is wider than the screen, it scrolls sideways as a whole: the row number and Patient name scroll away with the other columns, so the codes and times get the full width. Only the header row (top) and the totals row (bottom) stay in place. On Today the grid fills the screen down to the bottom edge and is the only part that scrolls up and down, so the header row is always visible and rows 1–5 are always one swipe away (v9o). The active cell has a blue outline and its whole row is tinted, so you can always see where you are.</p>
       <h4>Moving between cells: only when you say so</h4>
       <p>The cursor never jumps to the next cell on its own, not after a full PHN, a 4-digit time or a fee code, and not when a save finishes. Rows also stay where they are while you work; they are put back in time order when you leave the grid. You move to another cell only with:</p>
@@ -749,7 +835,7 @@
         <li>While a cell is active, a small <b>← Next →</b> bar floats above the keyboard; the cell you are in is scrolled into view above the keyboard. The screen never zooms in when you tap a cell, whatever the text size (you can still pinch to zoom).</li>
         <li>On a phone the <b>Patient name</b> column is narrower (about a third of the screen) and long names end in "…". Tap the name to see it in full in a small bubble above the cell; you can edit it there as usual.</li>
         <li>Rows are at least 40 px tall, so each cell is easy to tap.</li>
-        <li><b>Billing notes</b> is always a full-width column after <b>Dx (ICD-9)</b> (at least as wide as the other text columns, wider with a larger text size); tap it to write notes about what was done for the patient. The narrow column at the very end with <b>⋯</b> is the row menu (Start, Stop, Add time, Open details, Delete…), not a notes cell.</li>
+        <li><b>Billing notes</b> is always a full-width column after <b>Diagnosis (ICD-9)</b> (at least as wide as the other text columns, wider with a larger text size); tap it to write notes about what was done for the patient. The narrow column at the very end with <b>⋯</b> is the row menu (Start, Stop, Add time, Open details, Delete…), not a notes cell.</li>
       </ul>
       <h4 id="m-ned">Billing notes editor</h4>
       <p>The <b>Billing notes</b> cell shows a short preview (a line break shows as ↵). Tap the cell (or click it, or press F2 / Space when it's selected) to open a larger editor: a <b>sheet</b> that slides up from the bottom on a phone, or a <b>pop-up box</b> next to the cell on a computer. The editor grows as you type, can hold several lines (up to 500 characters) and uses 16 px or larger text, so iPhone doesn't zoom.</p>
@@ -786,7 +872,7 @@
         <li>One <b>↶ Undo</b> removes the added row. <b>⋯ → Same patient: start a new timer now</b> still starts a running encounter right away (and stops the first one if it was running).</li>
       </ul>
       <h4 id="m-undo">Undo and Redo (v9p)</h4>
-      <p>The <b>↶</b> (Undo) and <b>↷</b> (Redo) buttons sit in the toolbar above the grid, so they're always on screen without scrolling, on a phone too. A short message says what was undone, for example <i>Undone: Fee code(s) edited</i> or <i>Undone: row deleted</i>. Hold the pointer over ↶ on a computer to see what it will undo.</p>
+      <p>The <b>↶</b> (Undo) and <b>↷</b> (Redo) buttons sit in the toolbar above the grid, so they're always on screen without scrolling, on a phone too. A short message says what was undone, for example <i>Undone: Fee code edited</i> or <i>Undone: row deleted</i>. Hold the pointer over ↶ on a computer to see what it will undo.</p>
       <ul>
         <li><b>What can be undone:</b> typing over or clearing a cell; deleting or clearing rows (a deleted row comes back in its place with everything in it, including extra Dx codes, units, facility and functional centre); codes filled in from Fee Desk (fee, Dx and modifiers added together undo in one step); Facility # and Functional centre picks; unit changes (01–20); and changes that touch several rows at once.</li>
         <li><b>Keyboard:</b> Ctrl-Z / ⌘Z undoes, Shift-Ctrl-Z / ⇧⌘Z or Ctrl-Y redoes. While you are typing in a cell (before Tab or Enter), Ctrl-Z undoes your typing in that cell, like any text box.</li>
@@ -856,7 +942,7 @@
       <p>In the spreadsheet, type or paste a fee or ICD-9 code into the cell, or pick it in MedBilling Fee Desk:</p>
       <h4 id="m-pick">Pick a code in Fee Desk (v9g)</h4>
       <ol>
-        <li>Tap the <b>Fee code(s)</b> or <b>Dx (ICD-9)</b> cell of the row, then tap <b>↗</b> in that cell (or <b>ⓘ</b> beside a code that is already there, to start from that code). The row's <b>⋯</b> menu has the same two choices.</li>
+        <li>Tap the <b>Fee code</b> or <b>Diagnosis (ICD-9)</b> cell of the row, then tap <b>↗</b> in that cell (or <b>ⓘ</b> beside a code that is already there, to start from that code). The row's <b>⋯</b> menu has the same two choices.</li>
         <li>Fee Desk opens in <b>pick mode</b>. A slim bar says <i>Picking for MedBilling Logs: tap a code to send it, or ＋ to pick several (up to 10 fee, 10 ICD-9, 10 modifiers) · Modifiers · Cancel</i> (Fee Desk v36 says 3 of each; outside Alberta, or with an older Fee Desk: <i>Picking a code for MedBilling Logs, tap a code to send it back · Cancel</i>).</li>
         <li>Tap a billing code: a search result, a favourite or recent code, a code in the price list, or the big code on its page (also <b>Use … in MedBilling Logs</b>). Tap <b>Details</b> on a result to read it first.</li>
         <li>Tap an ICD-9 code: in an ICD-9 search, in <b>Suggested ICD-9</b> on a billing code's page, or <b>Use</b>.</li>
@@ -881,7 +967,7 @@
       </ol>
       <ul>
         <li><b>Nothing is overwritten.</b> New codes are added after what is already in each cell; a code already in the row is not added twice (the message lists it as <i>Already in this row</i>).</li>
-        <li><b>Fee code(s):</b> added after the existing ones.</li>
+        <li><b>Fee code:</b> added after the existing ones.</li>
         <li><b>Dx:</b> every ICD-9 code sent is kept. A Dx linked to a fee code goes beside that fee code; others go on fee codes that have no Dx yet, newly added ones first; any more are added after them in the Dx cell (the row grows to show them all). An existing Dx is never replaced.</li>
         <li><b>Modifiers:</b> <b>Modifier code 1</b> is for the row's first fee code and <b>Modifier code 2</b> for its second or later fee code. A modifier linked to a fee code in Fee Desk (or sent with just one fee code) goes in the cell for that fee code's place in the row; other modifiers go in Modifier code 1. A modifier already in either cell is not added again.</li>
         <li>Only codes and the one-time token travel, as with single codes. Works in Safari, the Home Screen app and the MedBilling Logs iPhone app (Fee Desk returns with the app's own link). Older versions of Fee Desk keep sending one code at a time.</li>
@@ -889,12 +975,12 @@
       <ol>
         <li>Open an encounter. Under <b>Fee codes and diagnostic codes</b>, check the fee schedule (province) on the right.</li>
         <li>In <b>Billing code</b>, type a code or a few words and tap a suggestion to add it.</li>
-        <li>In <b>Diagnostic code (ICD-9)</b> beside it, type a code or words and tap a suggestion. Each billing code you add gets its own diagnostic code field on the same row. You can also type any code that isn't in the list.</li>
+        <li>In <b>Diagnosis (ICD-9)</b> beside it, type a code or words and tap a suggestion. Each billing code you add gets its own diagnostic code field on the same row. You can also type any code that isn't in the list.</li>
       </ol>
       <ul>
         <li>Suggestions come from lists built into the app (fee codes from MedBilling Fee Desk; ICD-9 from Alberta Health's diagnostic code supplement). They work offline and nothing you type is sent anywhere.</li>
         <li><b>Look up in Fee Desk</b> opens MedBilling Fee Desk in a new tab with fees, rules and notes. It goes straight to the code only if what you typed is a known code. Otherwise it opens Fee Desk's home page. No patient information is ever put in the link.</li>
-        <li>Opening Fee Desk from an open entry may lock this app (it went to the background). Your unsaved entry is kept as an encrypted draft and reopens after you unlock. To bring a code back automatically, use <b>↗</b> in the spreadsheet (pick mode, above).</li>
+        <li>Opening Fee Desk from an open entry no longer locks this app (unless you stay away longer than the auto-lock time). Your unsaved entry is kept as an encrypted draft and reopens after you unlock. To bring a code back automatically, use <b>↗</b> in the spreadsheet (pick mode, above).</li>
         <li><b>Nova Scotia (approval pending):</b> code lookup is unavailable until permission is granted, so no Nova Scotia code list is included. Type the code manually (it is saved exactly as typed) and confirm it in the official MSI Physician’s Manual. Codes already saved in your entries are kept.</li>
         <li>Codes and fees are a convenience. Always confirm in the official Schedule of Medical Benefits before you submit claims.</li>
       </ul>
@@ -906,7 +992,7 @@
         <li>In an encounter, tap <b>Take photo</b> or <b>Attach photo</b>. Photos are resized, location data is removed, and they are stored only inside the app, encrypted. They aren't saved to your camera roll.</li>
         <li>Tap a thumbnail to view it or <b>Delete photo</b>.</li>
         <li>Move clinical photos into the official patient record, then delete them here.</li>
-        <li><b>The lock:</b> the app locks whenever it goes to the background and after a period without use (Settings → Lock; 1 to 15 minutes, default 2). Tap <b>Lock</b> at the top right to lock right away. The camera doesn't trigger a lock while you take a photo.</li>
+        <li><b>The lock:</b> the app locks after a period without use (Settings → Lock; 1 to 15 minutes, default 10; time spent in another tab or app counts). Switching tabs or apps does not lock it by itself; closing the tab does. Tap <b>Lock</b> at the top right to lock right away. The camera doesn't trigger a lock while you take a photo.</li>
       </ul>
     </section>
 
@@ -1043,8 +1129,22 @@
       <p>A red banner on Today says what went wrong (for example the folder was moved or deleted, permission is needed, or the drive is full), with <b>Try again</b> and <b>Backup settings</b>. It never interrupts what you're doing, and your entries stay safe on this device. The app tries again automatically (within 15 minutes, or at your interval). Failures and recoveries are kept in the audit log.</p>
     </section>
 
+    <section id="m-data">
+      <h3>16. Your data: Export my data, Import my data and moving</h3>
+      <!-- same wording as Settings → Your data: Export my data, Import my data and moving (shared/move.js T.guide) -->
+      <ul class="mvguide-man">
+        <li>Export my data saves everything this app keeps on this device to one file (its name ends in -my-data- and the date). Keep the file somewhere safe; it is your copy.</li>
+        <li>In MedBilling Logs the file is locked with your passcode. You need that passcode to import it later.</li>
+        <li>Import my data (Settings) checks the file first and shows what it holds. Nothing changes until you choose Merge or Replace.</li>
+        <li>Merge adds what is in the file to what is already here. Nothing here is removed.</li>
+        <li>Replace makes this device match the file. Tick the confirmation box first. Replace is all or nothing: if anything goes wrong part-way, nothing on this device is changed.</li>
+        <li>Older backup files can still be imported. Fee Desk favourites files can only be merged.</li>
+        <li>This app is moving: when the app gets a new web address, a notice appears at the top of the app with the new address and four steps: Export my data, open the new address, Import my data there, then add the new address to your home screen. Not now hides the notice until you next open the app.</li>
+        <li>Your data stays in this browser at this address only, so it does not move to a new address by itself. Export it first.</li>
+      </ul>
+    </section>
     <section id="m-priv">
-      <h3>16. Privacy, the law and your responsibility</h3>
+      <h3>17. Privacy, the law and your responsibility</h3>
       <h4>Exports contain health information</h4>
       <p class="mantip">An export contains health information. Keep it encrypted, and send the password separately, never in the same email or message. Store and send it only as permitted by Alberta's <b>Health Information Act (HIA)</b>, your custodian's or <b>AHS (Alberta Health Services)</b> privacy and information-security policies, and the privacy law and privacy commissioner's guidance in your own province or territory (e.g. the <b>Alberta OIPC</b>). Delete copies you no longer need.</p>
       <h4>Your responsibility</h4>
@@ -1062,7 +1162,7 @@
     </section>
 
     <section id="m-faq">
-      <h3>17. FAQ and troubleshooting</h3>
+      <h3>18. FAQ and troubleshooting</h3>
       <dl class="manfaq">
         <dt>How do I log a second encounter for the same patient?</dt><dd>Tap a cell in the patient's row, then the blue <b>＋ same</b> button in the row number (or ⋯ → Same patient: new row below). The name, MRN / PHN, facility, functional centre and H/C are copied; times and codes are left blank. See section 4.</dd>
         <dt>The app asks for Face ID by itself. Can I stop that?</dt><dd>Yes: <b>Settings → Lock → Easy unlock</b>, turn it off, and the passcode is used. Face ID is the default from v9p; it never replaces the passcode, which always works.</dd>
@@ -1074,7 +1174,7 @@
         <dt>I don't see "Unlock with a passkey" in my browser.</dt><dd>Your browser doesn't support the passkey PRF extension (it needs Safari 18 or later, current Chrome or Edge, or Firefox 148 or later on a computer). The option is hidden rather than offered in a weaker form.</dd>
         <dt>Does the timer stop when the app locks or the phone sleeps?</dt><dd>No. Timers use clock times and keep counting. Unlock and tap Stop (or fix the end time) when you're done.</dd>
         <dt>I opened Fee Desk and the app locked. Did I lose my entry?</dt><dd>No. An open entry is saved as an encrypted draft and reopens after you unlock. A code you picked in Fee Desk waits and is added right after you unlock.</dd>
-        <dt>I tapped a code in Fee Desk but nothing came back.</dt><dd>Open Fee Desk with <b>↗</b> in the Fee code(s) or Dx cell (the slim yellow "Picking … for MedBilling Logs" bar must show). Plain Fee Desk links only look codes up. Picks expire after 30 minutes.</dd>
+        <dt>I tapped a code in Fee Desk but nothing came back.</dt><dd>Open Fee Desk with <b>↗</b> in the Fee code or Dx cell (the slim yellow "Picking … for MedBilling Logs" bar must show). Plain Fee Desk links only look codes up. Picks expire after 30 minutes.</dd>
         <dt>Can I bring back several codes at once, with modifiers?</dt><dd>Yes (Alberta, v9l; up to 10 of each from v9m with Fee Desk v37). In Fee Desk's pick mode tap <b>＋</b> beside up to 10 fee codes, 10 ICD-9 codes and 10 modifiers (or tap a favourite with linked codes), check the tray and tap <b>Send to MedBilling Logs</b>. They are added to the row without overwriting anything: fee codes after the existing ones, Dx beside their fee codes and any extra Dx after them (none dropped), modifiers in Modifier code 1 (first fee code) or Modifier code 2 (second or later). See <a href="#m-multi">Several codes at once</a>.</dd>
         <dt>I couldn't scroll back up to my first rows on iPhone.</dt><dd>Fixed in v9o. In v9n the whole page could slide up (for example while the keyboard was open), hiding the header row and the first rows under the bar at the top, and a swipe inside the grid couldn't bring them back. Now the grid is the only thing that scrolls on Today; the page snaps back as soon as the keyboard closes.</dd>
         <dt>Where did the footer (disclaimers, Fee Desk link, manual) go?</dt><dd>On Today it's after the last row: scroll down past your rows to see it. On the other tabs it's at the bottom of the page as before.</dd>
@@ -1106,12 +1206,18 @@
         <dt>A red "Automatic backup didn't work" banner appeared.</dt><dd>Tap <b>Backup settings</b> and <b>Change location</b> to choose the folder again, or <b>Allow access</b> if the browser asks. Your entries are safe on the device in the meantime.</dd>
         <dt>Where can I get advice?</dt><dd>CMPA (1-800-267-6522), AMA billing support, or the CPSA. Links are in the Resources tab.</dd>
       </dl>
-      <p class="small muted">MedBilling Logs is general information, not legal, billing or medico-legal advice. Part of JFdeLara's Studio.</p>
+      <p class="small muted">MedBilling Logs is general information, not legal, billing or medico-legal advice. Part of Medibrisa.</p>
     </section>
   </div>
 </dialog>
 <!-- manual:end -->
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="toast" class="toast sptoast" role="status" aria-live="polite" hidden></div>
+<dialog id="ptDlg" class="ptdlg" aria-labelledby="ptDlgT">
+  <div class="pthead"><b id="ptDlgT">Find a patient</b><button type="button" class="ghost sm" id="ptClose" aria-label="Close">✕</button></div>
+  <input id="ptQ" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Name, MRN / PHN or ULI" aria-label="Find a patient by name, MRN / PHN or ULI" aria-controls="ptRes">
+  <p class="small muted ptnote">Searches every day on this device (Today and History). Nothing leaves your phone.</p>
+  <ul id="ptRes" class="ptres" role="listbox" aria-label="Matching patients"></ul>
+</dialog>
 <script src="js/vault.js"></script>
 <script src="js/pwpolicy.js"></script>
 <script src="js/easyunlock.js"></script>
@@ -1121,6 +1227,7 @@
 <script src="js/vendor/zip.min.js"></script>
 <script src="js/vendor/jspdf.umd.min.js"></script>
 <script src="js/report.js"></script>
+<script src="js/claims.js"></script>
 <div class="ned" id="noteEd" hidden><div class="nedbg" id="nedBg"></div><div class="nedbox" id="nedBox" role="dialog" aria-modal="true" aria-labelledby="nedT"><div class="nedhead"><b id="nedT">Billing notes</b><span class="nedsub" id="nedSub"></span></div><textarea id="nedTa" maxlength="500" rows="3" autocomplete="off" autocapitalize="sentences" spellcheck="true" enterkeyhint="enter" aria-labelledby="nedT"></textarea><div class="nedfoot"><span class="nedcnt" id="nedCnt" aria-live="off"></span><span class="nedsp"></span><button type="button" class="ghost" id="nedCancel">Cancel</button><button type="button" class="primary" id="nedDone">Done</button></div></div></div>
 <div class="ntip" id="nTip" hidden aria-hidden="true"></div>
 <dialog id="premDlg" class="premdlg" aria-labelledby="premT">
@@ -1141,6 +1248,18 @@
   <div class="fpkfoot"><button type="button" class="ghost" id="fpkClear">Clear</button><span class="nedsp"></span><button type="button" class="ghost" id="fpkCancel">Cancel</button></div>
 </div></dialog>
 <div class="gnav" id="gNav" hidden role="group" aria-label="Move between cells"><button type="button" id="gPrevF" aria-label="Previous cell">←</button><button type="button" id="gNextF" aria-label="Next cell">Next →</button></div>
+<aside id="crDrawer" class="crdrawer" hidden aria-label="Clinical resources"><div class="crdhead"><button type="button" class="ghost sm" id="crClose" aria-label="Close clinical resources">Close ✕</button></div><div id="crMount"></div></aside>
+<script src="js/scan.js"></script>
+<script type="module" src="js/rowfmt-boot.js"></script>
+<script type="module" src="js/favrow-boot.js"></script>
+<script src="js/shared/spui.js"></script>
+<script src="js/move-config.js"></script>
+<script src="js/shared/move.js"></script>
 <script src="js/app.js"></script>
+<script src="clinical-resources/cr-registry.js"></script>
+<script src="clinical-resources/cr-core.js"></script>
+<script src="clinical-resources/cr-panel.js"></script>
+<script src="clinical-resources/cr-onboarding.js"></script>
+<script src="js/cr-init.js"></script>
 </body>
 </html>

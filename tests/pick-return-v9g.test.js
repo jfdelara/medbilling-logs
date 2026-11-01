@@ -5,7 +5,7 @@
 // duplicate, Cancel, a locked vault on return (same-tab return), invalid return URLs rejected, 390 touch + 1280, NS held.
 // Run: cd /workspace/pwtest && BASE=http://127.0.0.1:18792/ node /workspace/medbilling-logs/tests/pick-return-v9g.test.js
 const path = require('path');
-const { chromium } = require(require.resolve('playwright', { paths: ['/workspace/pwtest'] }));
+const { chromium, NAME_POS, pickTypeIfScanMenu } = require('./helpers/cr-welcome');
 const BASE = (process.env.BASE || 'http://127.0.0.1:18792/').replace(/\/?$/, '/');
 const LOGS = BASE + 'medbilling-logs/', FD = BASE + 'delara-medbilling/';
 const OUT = process.env.OUT || '/workspace/artifacts/mbl-pick-return';
@@ -33,7 +33,7 @@ async function setup(browser, o, label) {
   await p.waitForFunction(() => !document.body.classList.contains('locked')); await p.waitForTimeout(600);
   return { ctx, p };
 }
-async function tapOrClick(pg, sel, touch) { const l = pg.locator(sel).first(); await l.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' })); await pg.waitForTimeout(60); if (touch) await l.tap(); else await l.click(); }
+async function tapOrClick(pg, sel, touch, pos = {}) { const l = pg.locator(sel).first(); await l.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' })); await pg.waitForTimeout(60); if (touch) await l.tap(); else await l.click(pos); }   // touch: cell centre (b11 phone fit: the row above's 44 px "+ same" button covers the left edge)
 // select the cell, then ↗ (the button shows on the active row), and catch the Fee Desk window
 async function openPick(p, sel, touch, cellSel) {
   await tapOrClick(p, cellSel, touch); await p.waitForTimeout(150);
@@ -51,7 +51,8 @@ async function fdSearch(fd, q) { await fdReady(fd); await fd.fill('#q', q); awai
 async function suite(browser, o, label, touch) {
   const { ctx, p } = await setup(browser, o, label);
   // a row with a patient (the code goes into this row)
-  await tapOrClick(p, cell(1, 'name'), touch); await p.keyboard.type('Pick Test'); await p.keyboard.press('Tab');
+  await tapOrClick(p, cell(1, 'name'), touch, NAME_POS); if (touch) await pickTypeIfScanMenu(p);   // b11: empty name on touch → Scan / Type menu
+  await p.keyboard.type('Pick Test'); await p.keyboard.press('Tab');
   await p.waitForSelector(`${G} tbody tr:nth-child(1)[data-id]`); await p.waitForTimeout(500);
 
   // 1. fee code from a search result
@@ -153,7 +154,7 @@ async function suite(browser, o, label, touch) {
   await plain.close();
 
   // 9. locked vault on return (pop-up blocked → same tab → the code waits for the unlock)
-  await tapOrClick(p, cell(2, 'name'), touch); await p.keyboard.type('Locked Return'); await p.keyboard.press('Tab');
+  await tapOrClick(p, cell(2, 'name'), touch, NAME_POS); if (touch) await pickTypeIfScanMenu(p); await p.keyboard.type('Locked Return'); await p.keyboard.press('Tab');
   await p.waitForSelector(`${G} tbody tr:nth-child(2)[data-id]`); await p.waitForTimeout(400);
   await p.evaluate(() => { window.open = () => null; });
   await tapOrClick(p, cell(2, 'fee'), touch); await p.waitForTimeout(150);
