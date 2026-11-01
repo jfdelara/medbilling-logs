@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stage public/ for GitHub Pages redeploy (jfdelara/medbilling-logs).
+# Stage public/ for GitHub Pages redeploy (the Logs repository).
 # 1) copies public/ to a temp dir (set BUMP_SW=1 to auto-bump the sw.js cache version; otherwise bump V yourself)
 # 2) uploads a tarball to a temporary (3-day) shipstatic URL
 # 3) prints the line to commit as .deploy/bundle.txt on main (via the GitHub connector); the Actions

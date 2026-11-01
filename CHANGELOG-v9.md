@@ -1,7 +1,7 @@
 # MedBilling Logs v9q — full-width on computers (2026-10-08)
 
 ## What changed (Logs v9q)
-- **Uses the whole window on a computer** (Jose, 10:54 PM, hospital office PC: Windows 11 / Edge, 1920 × 1080). With a mouse and a window of 1024 px or more, the app bar, time strip, tabs, Today toolbar and spreadsheet span the window with 14 px sides (was a centred column of 1100 / 1360 px). iPhone and iPad layouts are unchanged (same measurements as v9p at 402 × 874, 375 × 667, 820 × 1180).
+- **Uses the whole window on a computer** (Owner, 10:54 PM, hospital office PC: Windows 11 / Edge, 1920 × 1080). With a mouse and a window of 1024 px or more, the app bar, time strip, tabs, Today toolbar and spreadsheet span the window with 14 px sides (was a centred column of 1100 / 1360 px). iPhone and iPad layouts are unchanged (same measurements as v9p at 402 × 874, 375 × 667, 820 × 1180).
 - **Every column on screen.** On wide screens the spreadsheet shares out the window: In / Out / Min / Units / H/C and MRN keep their compact widths; Patient name, Facility #, Functional centre, Fee code(s), Modifier code 1 / 2, Dx and Billing notes get the spare width in proportion (name 1.2, notes 1.5, fee / Dx 1, Facility # 0.8, modifiers 0.7, Functional centre 0.5) instead of all of it going to Billing notes. When the window is narrower than the one-line widths, those columns give width back down to a floor (the longest code / word in the column, the header's longest word, a few characters) and wrap onto more lines; headers may take two lines. Result: from 1280 px up (tested 1280 × 800, 1366 × 768, 1440 × 900, 1920 × 969, 1920 × 1080, 2560 × 1440, with 17 px Windows-style scrollbars) all 16 columns through Billing notes and ⋯ are visible with no sideways scrolling; codes and names never break mid-code (names may break after a hyphen). A grid that gains or loses a scrollbar refits itself (ResizeObserver; wide screens only).
 - When the Facility # / Functional centre columns are squeezed (e.g. 1280 / 1366 px), they show just the code (88001, OBST); the full name stays in the tooltip and the list, so the ellipsis never cuts a digit off the code.
 - Grid still fills to the bottom of the window (fix: the number of empty rows needed is now worked out from an empty row's height, so a tall first row with a wrapped name no longer leaves the grid short with the footer showing); the page footer still only appears after the last row; sticky header and column alignment unchanged.
@@ -14,7 +14,7 @@
 # MedBilling Logs v9p — Face ID unlock by default; Undo / Redo on the day sheet; Same patient rows; plain-words totals; modifier cells link to Fee Desk (2026-10-07)
 
 ## Why
-Jose (Oct 7, 8:35 PM MT): make biometric unlock the default, prompting by itself, passcode as fallback. 8:44 PM: Undo / Redo on the Today grid, always reachable on iPhone. 9:01 PM: several encounters for the same patient in one tap, grouped, with an encounters · patients count.
+Owner (Oct 7, 8:35 PM MT): make biometric unlock the default, prompting by itself, passcode as fallback. 8:44 PM: Undo / Redo on the Today grid, always reachable on iPhone. 9:01 PM: several encounters for the same patient in one tap, grouped, with an encounters · patients count.
 
 ## What changed (Logs v9p)
 - **Face ID default.** App: right after the passcode is created, easy unlock is turned on and confirmed with one Face ID scan (this is also when iOS asks for permission; `NSFaceIDUsageDescription` updated). Cancel / deny / not enrolled leaves it off (toast; Settings → Lock to retry). Web: one-time "Use Face ID to unlock?" after setup, only where a built-in platform passkey with PRF exists (`EU.caps().platform`). Existing users: one-time "Use Face ID to unlock?" after their next passcode unlock, [Use Face ID] primary / [Not now] (`settings.euAsked`). Prompts by itself on app open and on return from the background (`__mblForeground`, `visibilitychange`); not after a manual Lock or foreground inactivity lock ("Unlock with Face ID" is then the primary button). Cancel / fail → passcode field focused, no re-prompt loop (euBusy + 1.5 s guard; the setup scan is wrapped in pickStart/pickEnd so the Face ID sheet doesn't trigger the background lock). Key wrapping unchanged (Keychain BIOMETRY_CURRENT_SET wrap key / passkey PRF → HKDF → AES-GCM).
@@ -28,7 +28,7 @@ Jose (Oct 7, 8:35 PM MT): make biometric unlock the default, prompting by itself
 # MedBilling Logs v9o — Facility # and Functional centre; after-hours premium units (01–20) with official limits; AHCIP holidays; Today scroll fix (2026-10-07)
 
 ## Why
-Jose (Oct 7, 5:48–6:36 PM MT): add Facility # and Functional centre before Fee code(s); track units for the after-hours time modifiers against the official limits with a pop-up (never blocking); include statutory-holiday modifiers and the AHCIP holiday list; a 01–20 unit picker per time modifier (1 unit = 15 min, 02 = 30 min); the Today footer must not take screen space; and (urgent, TestFlight build 7) on iPhone he could not scroll back up to rows 1–5.
+Owner (Oct 7, 5:48–6:36 PM MT): add Facility # and Functional centre before Fee code(s); track units for the after-hours time modifiers against the official limits with a pop-up (never blocking); include statutory-holiday modifiers and the AHCIP holiday list; a 01–20 unit picker per time modifier (1 unit = 15 min, 02 = 30 min); the Today footer must not take screen space; and (urgent, TestFlight build 7) on iPhone he could not scroll back up to rows 1–5.
 
 ## What changed (Logs v9o)
 - **Facility # / Functional centre** columns (after Units, before Fee code(s)): official Alberta Health "Facility and Functional Centre Definitions and Facility Listing" effective 2026-07-01 (`data/ahcip-facilities.json`, 411 facilities, sha256 recorded), searchable picker with favourites, recents, manual entry and source footnote; Med Access-style Functional centre list (CLNC, D, N, EMRG, MED, SURG); H/C set from the facility type on untouched new rows (offer "Set H/C" on existing rows); carry-down of the day's last pick (Settings toggle). Encrypted; CSV/Excel `facility_number`, `facility_name`, `functional_centre`; PDF/Word/History/backup/audit.
@@ -43,7 +43,7 @@ Jose (Oct 7, 5:48–6:36 PM MT): add Facility # and Functional centre before Fee
 # MedBilling Logs v9n — a single tapped ICD-9 is added, never replaces a Dx (2026-10-07)
 
 ## Why
-Jose (Oct 7, 11:45 AM MT): make the single-tap ICD-9 return append like the multi-pick does.
+Owner (Oct 7, 11:45 AM MT): make the single-tap ICD-9 return append like the multi-pick does.
 
 ## What changed (Logs v9n)
 - One ICD-9 code tapped in Fee Desk (`?picked=<code>&kind=dx`, unchanged link) now uses the multi-pick placement: beside the first fee code without a Dx; if every fee code has one, it is added after them (encrypted `dxx`, v9m); with no fee code it fills the empty Dx, else is added too. An existing Dx is never replaced (before: the last Dx was replaced, with Undo). A code already in the row is not added twice ("… is already in this row").
@@ -55,7 +55,7 @@ Jose (Oct 7, 11:45 AM MT): make the single-tap ICD-9 return append like the mult
 # MedBilling Logs v9m — up to 10 fee codes, 10 ICD-9 and 10 modifiers per pick; no Dx dropped (2026-10-07)
 
 ## Why
-Jose (Oct 7, 11:05 AM MT): raise the multi-pick limit to 10 codes at a time, and make sure Logs doesn't drop codes.
+Owner (Oct 7, 11:05 AM MT): raise the multi-pick limit to 10 codes at a time, and make sure Logs doesn't drop codes.
 
 ## What changed (Logs v9m)
 - **Limit 10 per kind:** `pickParse2` accepts up to 10 fee codes, 10 ICD-9 and 10 modifiers per pickv=2 link or message (11 of a kind → the whole link is ignored, as before for 4). Logs adds `pmax=10` to the Fee Desk link; Fee Desk v37 then allows 10 of each, Fee Desk v36 (no pmax support) keeps 3, which v9m still accepts. Format otherwise unchanged; a 10-of-each return link is ~270–300 characters (web and `mblogs://pick`).
@@ -67,7 +67,7 @@ Jose (Oct 7, 11:05 AM MT): raise the multi-pick limit to 10 codes at a time, and
 # MedBilling Logs v9l — several codes from Fee Desk in one pick: fee codes, ICD-9 and modifiers (2026-10-07)
 
 ## Why
-Jose (Oct 7, 9:58 AM MT): "We can have them click up to three billing codes, ICD-9 codes and/or complex modifier codes to link." Fee Desk v36 lets the user collect up to 3 fee codes, 3 ICD-9 codes and 3 modifiers in pick mode and send them together; Logs fills the row the pick started from.
+Owner (Oct 7, 9:58 AM MT): "We can have them click up to three billing codes, ICD-9 codes and/or complex modifier codes to link." Fee Desk v36 lets the user collect up to 3 fee codes, 3 ICD-9 codes and 3 modifiers in pick mode and send them together; Logs fills the row the pick started from.
 
 ## Hand-off format (version 2, backward compatible)
 - **Out (Logs → Fee Desk):** same as v9g plus `pv=2` (`?pick=hsc|dx&ctx=<128-bit one-time token>&return=&jur=&pv=2`). Fee Desk v35 or older ignores `pv` and behaves as before; Fee Desk v36 turns on the ＋/tray only when `pv=2` and the province is Alberta.
@@ -90,7 +90,7 @@ Jose (Oct 7, 9:58 AM MT): "We can have them click up to three billing codes, ICD
 # MedBilling Logs v9k — Modifier code 1 / 2 columns; wider, taller code cells (2026-10-07)
 
 ## Why
-Jose (Oct 7, 8:45 AM MT): "we need an extra two columns called modifier codes 1 and 2. The columns have to be a bit wider for the billing codes and the ICD-9 as well as the new columns for the modifier codes, as sometimes we have many of them to enter for one single patient and it gets tricky trying to add them when the column or the cell is narrow or shallow."
+Owner (Oct 7, 8:45 AM MT): "we need an extra two columns called modifier codes 1 and 2. The columns have to be a bit wider for the billing codes and the ICD-9 as well as the new columns for the modifier codes, as sometimes we have many of them to enter for one single patient and it gets tricky trying to add them when the column or the cell is narrow or shallow."
 
 ## What changed (Logs v9k)
 - **Columns:** # · Patient name · MRN / PHN · H/C · In · Out · Min · Units · Fee code(s) · **Modifier code 1** · **Modifier code 2** · Dx (ICD-9) · Billing notes · ⋯ (Today, every History day, light/blank rows, totals row now spans 5 columns over Fee … Billing notes).
@@ -106,7 +106,7 @@ Jose (Oct 7, 8:45 AM MT): "we need an extra two columns called modifier codes 1 
 # MedBilling Logs v9j — Billing notes column visible and tappable on iPhone (2026-10-06)
 
 ## Why
-Jose on TestFlight build 5 (v9i): after Fee code(s) and Dx (ICD-9) there was only a skinny unnamed "⋯" column; he could not type comments there, and its width did not match the other cells. On the desktop web the notes column worked.
+Owner on TestFlight build 5 (v9i): after Fee code(s) and Dx (ICD-9) there was only a skinny unnamed "⋯" column; he could not type comments there, and its width did not match the other cells. On the desktop web the notes column worked.
 
 ## Cause
 That skinny column is the row-actions (⋯) column; the **Billing notes** column next to it had collapsed to 0 px. The notes `<col>` had no width ("takes the rest") and the table relied on `min-width` with `table-layout: fixed; width: 100%`. Chromium honours `min-width` there; iOS WebKit (Safari and the app's WKWebView) does not, so the table stayed as wide as the phone and the auto-width notes column got nothing.
@@ -120,7 +120,7 @@ That skinny column is the row-actions (⋯) column; the **Billing notes** column
 # MedBilling Logs v9i — Nothing pinned, text size and font, notes editor, readable phone cells (2026-10-06)
 
 ## Why
-Jose tested TestFlight build 4 (v9h) on his iPhone: the pinned Patient column took too much room, the letters were too big, the notes cell was too small, and the cells were too narrow and hard to see.
+Owner tested TestFlight build 4 (v9h) on his iPhone: the pinned Patient column took too much room, the letters were too big, the notes cell was too small, and the cells were too narrow and hard to see.
 
 ## What changed (Logs v9i)
 - **Nothing pinned:** the sticky # and Patient name columns are gone on every screen size (no setting); the grid scrolls sideways as a whole. Header (top) and totals (bottom) rows stay sticky.
@@ -135,7 +135,7 @@ Jose tested TestFlight build 4 (v9h) on his iPhone: the pinned Patient column to
 # MedBilling Logs v9h — Endless rows (2026-10-06)
 
 ## Why
-Jose: "the rows end on 40, I need that to be endless and will add another 10 rows as you are 5 rows away from the end".
+Owner: "the rows end on 40, I need that to be endless and will add another 10 rows as you are 5 rows away from the end".
 
 ## What changed (Logs v9h)
 - **Endless grid:** in Today (and any day shown in the grid), whenever the focused cell's row is within 5 rows of the last row, 10 blank rows are appended — however focus got there (Tab, Enter, ↑↓, the Next bar, a tap), with or without typing. Scrolling to within 5 rows of the bottom (grid or page) appends 10 more. Focus, caret, typed text and row order are untouched; row numbers continue. The grown size is kept per day across redraws (saves, ticks) until lock/reload.
@@ -159,7 +159,7 @@ Jose: "the rows end on 40, I need that to be endless and will add another 10 row
 # MedBilling Logs v9f — Spreadsheet moves only when you say so; columns fit their content; Nova Scotia codes withheld (2026-10-06)
 
 ## Why
-Jose: "The row width need to adapt how much information I enter on any of the column... It jumped in the next column when I was not ready. It should only jump if i click the forward arrow, enter or tab. On the mobile, i need to press with my finger on the cell or next column to type or press enter." Then: the phone's return key must move to the next cell in every column, including notes. And: no Nova Scotia code data until permission arrives.
+Owner: "The row width need to adapt how much information I enter on any of the column... It jumped in the next column when I was not ready. It should only jump if i click the forward arrow, enter or tab. On the mobile, i need to press with my finger on the cell or next column to type or press enter." Then: the phone's return key must move to the next cell in every column, including notes. And: no Nova Scotia code data until permission arrives.
 
 ## What was causing the "jump"
 - **← → arrow keys left the cell** when it had been entered with Tab/Enter or the ▶ flow (cell selected, not "editing"): pressing → to get to the end of the text moved to the next column.
@@ -184,7 +184,7 @@ Jose: "The row width need to adapt how much information I enter on any of the co
 # MedBilling Logs v9e — Easy unlock: Face ID / Touch ID / fingerprint, passkey, quick PIN (2026-10-06)
 
 ## Why
-Jose: typing the login passcode every time is annoying; add easy unlock without weakening encryption at rest. Exports still need a typed password that differs from the passcode.
+Owner: typing the login passcode every time is annoying; add easy unlock without weakening encryption at rest. Exports still need a typed password that differs from the passcode.
 
 ## What changed (Logs v9e)
 - **`public/js/easyunlock.js` (new)** wraps the existing 256-bit vault key (PBKDF2-SHA-256 600k output, unchanged; no data migration) for each easy-unlock method and stores only the wrapped copy (AES-GCM, per-method AAD) in the vault meta record `easy`:
@@ -205,7 +205,7 @@ Jose: typing the login passcode every time is annoying; add easy unlock without 
 # MedBilling Logs v9d — Encrypted exports by default, privacy notice, passphrase login (2026-10-06)
 
 ## Why
-Jose: "the export files from MedBilling Log should be encrypted, as it contains patient information. As a disclaimer, it should comply with laws of privacy and AHS or your Provincial privacy commissioner." Then: the export password must be user-chosen, strong, different from the app passcode and never stored; the login may be a numeric passcode or a passphrase.
+Owner: "the export files from MedBilling Log should be encrypted, as it contains patient information. As a disclaimer, it should comply with laws of privacy and AHS or your Provincial privacy commissioner." Then: the export password must be user-chosen, strong, different from the app passcode and never stored; the login may be a numeric passcode or a passphrase.
 
 ## What changed (Logs v9d)
 - **Every export is an AES-256 password-protected .zip** (zip.js 2.23.0, WinZip AE-2, `encryptionStrength: 3`): PDF, Word, **Excel (new in the report dialog)**, CSV and the audit-log export (PDF/CSV). There is no unencrypted export path. Backup readable copies are now always zipped (the "turn protection off" option was removed).
@@ -223,7 +223,7 @@ Jose: "the export files from MedBilling Log should be encrypted, as it contains 
 # MedBilling Logs v9c — Today is a real spreadsheet (2026-10-06)
 
 ## Why
-Jose rejected v9/v9b twice: Today still read as an app screen with a grid inside it, not as a spreadsheet.
+Owner rejected v9/v9b twice: Today still read as an app screen with a grid inside it, not as a spreadsheet.
 
 ## What changed (Logs v9c)
 - **The grid is the Today screen.** Full-width `table.grid` with gridlines on every cell, grey header row and grey row-number column, sticky header, ~30px rows (32px on touch), tabular monospace numbers, and a highlighted active cell, row and column header.
@@ -245,7 +245,7 @@ Jose rejected v9/v9b twice: Today still read as an app screen with a grid inside
 # MedBilling Logs v9b — Excel-like sheet polish (2026-10-06)
 
 ## Why
-Jose opened MedBilling Logs v9 and said the Today/History view did not look like a spreadsheet (soft card rows, left accent bars, orphaned History header).
+Owner opened MedBilling Logs v9 and said the Today/History view did not look like a spreadsheet (soft card rows, left accent bars, orphaned History header).
 
 ## What changed (Logs v9b)
 - **Real `<table class="sheet">`** with `<thead>` / `<tbody>` for Today, each History day, and on-site history.
@@ -265,7 +265,7 @@ Jose opened MedBilling Logs v9 and said the Today/History view did not look like
 # MedBilling Logs v9 — Spreadsheet redesign (2026-10-06)
 
 ## Why
-Encounters were hard to follow on phone and desktop. Jose asked for a spreadsheet-style view to see and enter patient name, MRN/PHN, time in/out, billing notes, and fee/dx codes, with Fee Desk handoff for codes.
+Encounters were hard to follow on phone and desktop. Owner asked for a spreadsheet-style view to see and enter patient name, MRN/PHN, time in/out, billing notes, and fee/dx codes, with Fee Desk handoff for codes.
 
 ## What changed (Logs)
 - **Today + History** use a spreadsheet grid (`.rows.sheet` / `.erow` / `rowHtml` / `rowsHead`).
