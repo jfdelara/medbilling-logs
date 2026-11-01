@@ -109,7 +109,7 @@ async function setup(browser, o, label) {
   for (const [engine, br] of [['chromium', cr], ['webkit', wk]]) {
     const L = `${engine} 402x874`, p = await setup(br, { viewport: { width: 402, height: 874 }, userAgent: IPHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 3 }, L);
     await p.locator(cell(1, 'mrn')).tap(); await p.waitForTimeout(250);
-    // b11 phone fit (Jose, 2026-10-19: half-height rows, public/js/app.js:34-36) + Eng ruling 2026-10-22: the visible "+ same" chip stays
+    // b11 phone fit (the owner, 2026-10-19: half-height rows, public/js/app.js:34-36) + Eng ruling 2026-10-22: the visible "+ same" chip stays
     // small inside the 20 px row; its invisible touch area (the button box) is >= 44 px wide, exactly the row height, and overlaps no neighbour
     const g = await p.evaluate(G => { const tr = document.querySelector(`${G} tbody tr:nth-child(1)`), b = tr.querySelector('.spb'), th = tr.querySelector('th.rn'), r = b.getBoundingClientRect(), rr = tr.getBoundingClientRect(), tc = th.getBoundingClientRect(), chip = b.querySelector('b').getBoundingClientRect();
       const nb = [tr.querySelector('td.c-name'), tr.nextElementSibling && tr.nextElementSibling.querySelector('th.rn'), tr.previousElementSibling && tr.previousElementSibling.querySelector('th.rn'), document.querySelector(`${G} thead th`)].filter(Boolean).map(e => e.getBoundingClientRect());

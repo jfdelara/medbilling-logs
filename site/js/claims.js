@@ -1,7 +1,7 @@
 /* MedBilling Logs - claims timing (H-Link batch rules), seats and permissions, weekly (Thursday) report. Pure logic, no DOM,
    no storage, no network: app.js keeps everything in the encrypted vault. H-Link is NOT connected: "Queued for H-Link"
    only marks a claim as approved and waiting for a batch; nothing is ever sent.
-   Rules (Jose, 2026-10-15, following H-Link): processing Tuesday to Thursday, submission cutoff Thursday 4:30 PM
+   Rules (the owner, 2026-10-15, following H-Link): processing Tuesday to Thursday, submission cutoff Thursday 4:30 PM
    (America/Edmonton), payment the following Friday. Provider approvals close 30 minutes earlier (Thursday 4:00 PM); an
    approval at or after 4:00 PM Thursday rolls to the next Thursday's batch. A pay Friday (or a batch Thursday) that is a
    statutory / designated holiday is flagged, never moved: Alberta Health publishes the actual schedule. */

@@ -283,7 +283,7 @@ async function phone(browser) {
   await setSize(p, 6); const gL = await geo(p), v3 = await codeVis(p, 2, 'fcen');
   ok(gL.w.fno >= g.w.fno && gL.w.fcen >= g.w.fcen && (gL.w.fno > g.w.fno || gL.w.fno >= 390 * 0.4) && v3 && v3.full, `${L}: at ${gL.fs} the columns grow (or stay at the phone cap) (Facility # ${g.w.fno} → ${gL.w.fno}px) and the code still shows (${v3 && v3.code})`);
   await showCols(p); await p.locator(cell(3, 'fcen')).tap(); await fpkOpen(p); const fs2 = await p.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#fpkList .pk')).fontSize));
-  // b11 phone fit (Jose 2026-10-19, app.js:36): grid text = round(20 × 0.85) = 17 px on phones; the sheet is grid + 2 px
+  // b11 phone fit (the owner 2026-10-19, app.js:36): grid text = round(20 × 0.85) = 17 px on phones; the sheet is grid + 2 px
   // (public/css/app.css:757 .fpkbox max(15px, --g-fs + 2px)) → exactly 19 px (v9o expected ≥ 21 = 19 + 2 before phone fit). QA S2: tightened to ===
   const gfs2 = await p.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--g-fs')));
   ok(fs2 === Math.max(15, gfs2 + 2) && gfs2 === 17, `${L}: sheet = grid + 2 px (${fs2} = ${gfs2} + 2)`);

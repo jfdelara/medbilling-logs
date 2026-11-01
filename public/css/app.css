@@ -1187,7 +1187,7 @@ table.grid .gc.sx:focus{background:transparent}
 }
 /* b11 phone (Eng 2026-10-22): on the active row the camera (right 21px) and ↗ (right 1px) buttons take the cell's last 39 px; keep the name text clear of them */
 @media (max-width:480px){table.grid tbody tr.act>td.c-name .gc[data-c="name"]{padding-right:40px}}
-/* b11 phone-fit "+ same" touch area (Eng ruling 2026-10-22, on Jose's 2026-10-19 half-height rows): the visible chip stays small
+/* b11 phone-fit "+ same" touch area (Eng ruling 2026-10-22, on the owner's 2026-10-19 half-height rows): the visible chip stays small
    (21×19 inside the 20 px row) while the button itself - the invisible touch area - fills the whole # cell: ≥44 px wide, exactly the
    row's height, never reaching into the next row or the name cell. The # column is 44 px on phones so that area fits inside it. */
 @media (max-width:480px){
@@ -1215,7 +1215,7 @@ table.grid .gc.sx:focus{background:transparent}
 .esum .sc .crow{display:flex}
 .chip .cl1 .crow{flex:1 1 auto}
 .chip .cl1{min-width:0;white-space:normal;overflow:visible;height:auto}
-/* B11-fit (Jose 2026-10-22): the ⋯ More menu and its Track again chips stay inside the viewport at 320/360/390. The chip wraps
+/* B11-fit (the owner 2026-10-22): the ⋯ More menu and its Track again chips stay inside the viewport at 320/360/390. The chip wraps
    instead of running off the edge; code, price and [ICD-9] never shrink (.crc/.crp/.cri flex:0 0 auto above), the short label
    wraps (no ellipsis anywhere). */
 .menu{max-width:calc(100vw - 12px);box-sizing:border-box}

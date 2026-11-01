@@ -92,7 +92,7 @@ const M = p => p.evaluate(() => { const R = el => { if (!el) return null; const 
     ok(strip > 0 && strip <= 30, `${vp}: v9x batch strip is one line on this screen (${strip}px)`);
     if (m.cols.clm != null) { m.sw -= m.cols.clm; delete m.cols.clm; } if (Array.isArray(m.gwrap)) m.gwrap[1] -= strip;
     // b11: the new Sex column is the only tablet change (same treatment as the v9x Claim column); on phones (≤ 480 px) the b11
-    // phone-fit sheet (Jose, 2026-10-19: half-size rows, content-sized columns) replaces the v9p layout, so check that instead
+    // phone-fit sheet (the owner, 2026-10-19: half-size rows, content-sized columns) replaces the v9p layout, so check that instead
     if (m.cols.sex != null) { m.sw -= m.cols.sex; delete m.cols.sex; }
     // spec: public/js/app.js:34-38 (phone ≤ 480 px → html.phonefit, --g-h = max(20, round(40 × 0.5)) = 20 px); table narrower than v9p
     if (w <= 480) {

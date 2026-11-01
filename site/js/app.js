@@ -31,7 +31,7 @@
   function dispApply(d) {
     d = d || dispLoad(); const r = document.documentElement, st = r.style, fs = d.fs, touch = TOUCHQ.matches;
     let h = touch ? Math.max(40, Math.round(fs * 2.6)) : Math.max(28, Math.round(fs * 2.3));
-    // b11 phone fit (Jose, 2026-10-19): on phones up to 480 px the sheet is half size: rows at 50 % of the touch height
+    // b11 phone fit (the owner, 2026-10-19): on phones up to 480 px the sheet is half size: rows at 50 % of the touch height
     // (40 → 20 px at the default), text a step smaller (13 → 11 px), so #, name, MRN/PHN, H/C, In and Out fit the screen
     const phone = PHONEQ.matches, gfs = phone ? Math.max(10, Math.round(fs * 0.85)) : fs;
     if (phone) h = Math.max(20, Math.round(h * 0.5));
@@ -487,7 +487,7 @@
   // below the real ones (typing in one creates the encounter), a totals row, and Sheets-style keyboard navigation.
   // Name / MRN / notes / codes are encrypted with the entry (saveEnc). Never put them in URLs or console logs.
   const COLS_ALL = [['rn', '#'], ['name', 'Patient name'], ['sex', 'Sex'], ['mrn', 'MRN / PHN'], ['hc', 'H/C'], ['tin', 'In'], ['tout', 'Out'], ['min', 'Min'], ['u', 'Units'], ['ref', 'Referring provider'], ['fno', 'Facility #'], ['fcen', 'Functional centre'], ['fee', 'Fee code'], ['mod1', 'Modifier code 1'], ['mod2', 'Modifier code 2'], ['dx', 'Diagnosis (ICD-9)'], ['note', 'Billing notes'], ['clm', 'Claim'], ['act', '']];
-  // logs-billing (Jose, 2026-10-16): Referring provider sits immediately before Facility # (sheet and Tab order); Claim
+  // logs-billing (the owner, 2026-10-16): Referring provider sits immediately before Facility # (sheet and Tab order); Claim
   // (Approve/Submit, then "Queued for H-Link") after Billing notes.
   // v9r: Referring provider column (name + practitioner ID), off unless turned on in Settings
   const refOn = () => !!(S && S.settings && (S.settings.refColSet ? S.settings.refCol : true));   // v9s: on unless the user turned it off
@@ -534,7 +534,7 @@
   const gInp = (c, val, o) => FPC[c] ? fpCell(c, o.e || null, o.lbl) : c === 'note' ? `<div class="gc nprev" data-c="note" tabindex="0" role="button" aria-label="${esc(o.lbl)}. Opens the notes editor" data-v="${esc(val)}">${esc(notePrev(val))}</div>`
     : WRAP[c] && !(c === 'name' && NARROWQ.matches) ? `<textarea rows="1" ${gAttrs(c, o)}>${esc(val)}</textarea>`
     : `<input ${gAttrs(c, o)} value="${esc(val)}">`;
-  // b11 (Jose, 2026-10-20: AHS forms require Sex): a narrow Sex cell after Patient name. Stored in e.ma.sex (the same field as the
+  // b11 (the owner, 2026-10-20: AHS forms require Sex): a narrow Sex cell after Patient name. Stored in e.ma.sex (the same field as the
   // entry window's Sex and the scan sheet). Tap / click → quick pick M, F, X, U (unknown); typing M / F / X / U on it sets it too.
   const SEXV = { M: 'Male', F: 'Female', X: 'X', U: 'Unknown' };
   const normSex = v => { const x = String(v == null ? '' : v).trim().toUpperCase(); return SEXV[x] ? x : x === 'MALE' ? 'M' : x === 'FEMALE' ? 'F' : x === 'UNKNOWN' ? 'U' : ''; };
@@ -2120,7 +2120,7 @@
   // v9i: [min desktop, min touch, max] in characters ('0' widths of the column's font, cell padding included), so the
   // minimums scale with Settings → Display → Text size: MRN/PHN 10 digits, Fee code 6 + ↗, Dx 5 + ↗, Billing notes wider.
   // Patient name on a narrow screen: at most ~30 % of the width (one line, ellipsis; the full name shows on focus).
-  // v9k (Jose: several codes per patient; narrow / shallow code cells were hard to fill): Fee code(s) and Dx fit ~15 code
+  // v9k (the owner: several codes per patient; narrow / shallow code cells were hard to fill): Fee code(s) and Dx fit ~15 code
   // characters next to their ↗ ⓘ buttons, the two Modifier columns ~15 characters, before anything wraps; the cell being
   // edited is at least two lines tall (CSS) and every code cell wraps and grows the row instead of clipping.
   const CODEC = { fee: 1, mod1: 1, mod2: 1, dx: 1 };
@@ -2250,7 +2250,7 @@
     // Billing notes takes the rest of the screen (at least its own fitted width); the table never truncates a column.
     // v9j: explicit pixel widths for the notes column AND the table. iOS WebKit ignores min-width on a table-layout:fixed
     // table, so with only min-width the table stayed 100 % of the phone and the auto-width Billing notes column got 0 px
-    // (the skinny "⋯" column Jose saw on build 5). Chromium hid the bug.
+    // (the skinny "⋯" column the owner saw on build 5). Chromium hid the bug.
     const total = Math.ceil(Math.max(ww, sum + noteW)), nPx = Math.max(noteW, total - Math.ceil(sum));
     if (noteCol && noteCol.style.width !== nPx + 'px') { noteCol.style.width = nPx + 'px'; changed = true; }
     const tw = (Math.ceil(sum) + nPx) + 'px';
@@ -4341,7 +4341,7 @@
     const td = today(), s2 = new Set(S.settings.holExtra || []); $('#holToday').checked ? s2.add(td) : s2.delete(td); S.settings.holExtra = [...s2].sort();
     await holChanged(`${td} ${$('#holToday').checked ? 'marked as a statutory holiday' : 'no longer marked as a holiday'}`);
   };
-  // ============================================================ logs-billing (Jose, 2026-10-15/16): Approve/Submit on each billing
+  // ============================================================ logs-billing (the owner, 2026-10-15/16): Approve/Submit on each billing
   // item, H-Link batch timing (approvals close Thu 4:00 PM, H-Link cutoff Thu 4:30 PM, pay the following Friday), staff seats with
   // per-provider View / Submit permissions (default off, audit-logged), the Thursday report, N for a new entry, Med Access Tab
   // order in the entry window, and a searchable Referring provider list with favourites. TEST BUILD: H-Link is not connected;
@@ -4569,12 +4569,12 @@
     if (document.querySelector('dialog[open], .cro-overlay') || ($('#crDrawer') && !$('#crDrawer').hidden)) return;
     ev.preventDefault(); newEntry();
   });
-  // ---- entry window: Tab follows Jose's Med Access billing screen (photo 2026-10-14 7:22 PM MT). Med Access, row by row:
+  // ---- entry window: Tab follows the owner's Med Access billing screen (photo 2026-10-14 7:22 PM MT). Med Access, row by row:
   // Billing provider, Skill, Referring provider / BA #, Facility, Functional centre, Location; each health service: Code,
   // Calls, Date, then Diagnosis, Modifier (units); then Admission date, General, EMSAF, Newborn, Good faith / Original
   // facility, Original location, Encounter, Conf. / Intercept reason, Limit amount, Send as conf. / Internal comment.
   // Fields Med Access has elsewhere (patient: chart header) or not at all (In / Out, H/C) are placed where they fit best;
-  // BA # comes before Referring provider so Referring provider → Facility # stays together (Jose, 2026-10-16).
+  // BA # comes before Referring provider so Referring provider → Facility # stays together (the owner, 2026-10-16).
   const EW_TAB_HEAD = ['name', 'mrn', 'sex', 'prov', 'skill', 'ba', 'refNm', 'refId', 'fno', 'fcen', 'hc', 'loc'];
   const EW_TAB_FOOT = ['tin', 'tout', 'admit', 'general', 'emsaf', 'newborn', 'goodFaith', 'origFac', 'origLoc', 'encNo', 'conf', 'intercept', 'limitAmt', 'sendConf', 'note'];
   function ewTabList() {

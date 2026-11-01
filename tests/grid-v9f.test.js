@@ -89,7 +89,7 @@ const settle = p => p.waitForTimeout(1300);
   await m.screenshot({ path: path.join(OUT, 'narrow-content-390.png') });
   const attrs = await m.evaluate(() => [...document.querySelectorAll('#todayList tbody tr:nth-child(1) .gc')].filter(e => e.tagName !== 'BUTTON' && !e.classList.contains('fpv')).map(e => [e.dataset.c, e.getAttribute('enterkeyhint'), parseFloat(getComputedStyle(e).fontSize)]));
   ok(attrs.filter(a => a[0] !== 'note').every(a => a[1] === 'next'), 'every editor has enterkeyhint="next": ' + attrs.map(a => a[0]).join(','));
-  // b11 phone fit (Jose, 2026-10-19; public/js/app.js:34-36): on phones the sheet text is a step smaller, 13 → 11 px (round(13 × 0.85));
+  // b11 phone fit (the owner, 2026-10-19; public/js/app.js:34-36): on phones the sheet text is a step smaller, 13 → 11 px (round(13 × 0.85));
   // iPhone focus zoom is off via the viewport instead (16 px+ in the notes editor)
   ok(attrs.every(a => a[2] >= 10.5 && a[2] <= 11), 'phone grid text is the b11 phone-fit 11 px (13 px default × 0.85): ' + attrs.map(a => a[0] + ' ' + a[2]).join(', '));
   ok(/maximum-scale=1/.test(await m.getAttribute('meta[name=viewport]', 'content')), 'iPhone: viewport stops the focus zoom (maximum-scale=1)');

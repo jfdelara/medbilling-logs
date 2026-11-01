@@ -1,4 +1,4 @@
-// b11 code rows (Jose via Eng, 2026-10-22), rendered by Fee Desk's shared formatRow (public/js/shared/rowfmt.js, vendored):
+// b11 code rows (the owner via Eng, 2026-10-22), rendered by Fee Desk's shared formatRow (public/js/shared/rowfmt.js, vendored):
 //   code(·mods) [+N] · short label (2-3 words) · price · [ICD-9]     e.g. "80.19B Myomectomy $308.65 [218]"; ICD-only rows "[218] Uterine leiomyoma"
 // with the full description in the tooltip / aria-label (and the detail view). ICD-saved rows must not lead with the diagnosis.
 // Views: track-again / Favourite code-set chips (incl. the '· 218 +1' fix), encounter details "Codes", edit-dialog fee search, ICD-9 suggestions and code chips,

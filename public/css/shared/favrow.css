@@ -75,7 +75,7 @@
 .fdfav .lchip.k-M{border-color:#c4b5fd;background:#f5f3ff}
 .fdfav .lchip.k-M .code{color:#5b21b6}
 .fdfav #results .hit.gmod .ccode{color:#5b21b6}
-.fdfav /* v39 slim Favourites (Jose Oct 9): every favourite is ONE line: code · description … · linked chips · fee · ★ · ⋯.
+.fdfav /* v39 slim Favourites (the owner Oct 9): every favourite is ONE line: code · description … · linked chips · fee · ★ · ⋯.
    The description truncates first; only the linked chips wrap (inside their own box) when they really don't fit.
    Chips show just the code in a narrow list and code + short title when the list is wide. */
 .hit.compact.haslinks,.fdfav #results .hit.compact.haslinks{flex-wrap:nowrap;row-gap:0;padding-top:2px;padding-bottom:2px}
@@ -115,7 +115,7 @@
 .fdfav #results .hit:not(.compact):has(.pdet){padding-bottom:52px}
 @media (max-width:600px){.fdfav html.picking #results .hit.compact{flex-wrap:wrap;row-gap:2px;max-width:100%;min-width:0}.fdfav html.picking #results .hit.compact .cdesc.short{min-width:0;flex:1 1 auto}}
 .fdfav .fee.lkp{flex:0 0 auto;font-size:.82rem;font-weight:700;white-space:nowrap;color:var(--ink);margin-left:auto}
-.fdfav /* v44 (Jose OK 2026-10-22): search cards show no full-description line. .hdesc stays in the DOM (aria-hidden; the full text is in
+.fdfav /* v44 (the owner OK 2026-10-22): search cards show no full-description line. .hdesc stays in the DOM (aria-hidden; the full text is in
    the card's aria-label and the label's title) as an invisible layer under the row,.fdfav so a tap on it is still the card itself
    (MedBilling Logs multipick-v9l taps .hdesc). row1 sits above it so ☆,.fdfav ＋ and Details stay reachable. */
 #results .hit:not(.compact) .hdesc,.fdfav html.phone #results .hit:not(.compact) .hdesc{position:absolute;inset:0;display:block;opacity:0;overflow:hidden;color:transparent;pointer-events:none;margin:0;padding:0}

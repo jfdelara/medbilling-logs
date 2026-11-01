@@ -74,7 +74,7 @@ const inner = (zip, ext) => { const d = fs.mkdtempSync('/tmp/mbl9k-'); execFileS
 
 async function desktop(browser) {
   // v9q: a computer window shares its width out so every column shows; the v9k "codes fit 15+ characters" layout is checked
-  // where the window has room for it (1920 × 1080, Jose's office monitor). 1280-1440 px: all columns visible, codes wrap (wide-v9q).
+  // where the window has room for it (1920 × 1080, the owner's office monitor). 1280-1440 px: all columns visible, codes wrap (wide-v9q).
   const L = '1920';
   const p = await setup(browser, { viewport: { width: 1920, height: 1080 } }, L, false);
   // ---- column order and headers
@@ -188,7 +188,7 @@ async function phone(browser) {
   ok(JSON.stringify(h.map(x => x[0])) === JSON.stringify(ORDER), `${L}: same column order on the phone`);
   ok(await p.inputValue(cell(4, 'mod1')) === 'CMGP, BMI' && await p.inputValue(cell(4, 'mod2')) === 'TELES' && await p.inputValue(cell(1, 'mod1')) === '', `${L}: new-format and old-format entries side by side`);
   let g = await geo(p, 4);
-  // b11 phone fit (Jose, 2026-10-19; public/js/app.js:34-37): on phones the sheet is half size with content-sized columns, so the
+  // b11 phone fit (the owner, 2026-10-19; public/js/app.js:34-37): on phones the sheet is half size with content-sized columns, so the
   // v9k 15-character room no longer applies. Spec for the new minimum: app.js:2102 + 2110 (FIT touch minimum × 0.5 on phones:
   // fee/dx 25.5 → 12.75 ch, mod1/mod2 24.5 → 12.25 ch of the grid font); the column width is checked against that (QA S2).
   const pch = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('#todayList tbody .gc[data-c="fee"]')), c = document.createElement('canvas').getContext('2d'); c.font = `${s.fontWeight} ${s.fontSize} ${s.fontFamily}`; return c.measureText('0').width; });
@@ -203,7 +203,7 @@ async function phone(browser) {
   let b = await cellBox(p, 4, 'mod1');
   const vis = await p.evaluate(() => { const td = document.activeElement.closest('td').getBoundingClientRect(), w = document.querySelector('#todayList .gwrap').getBoundingClientRect(); return td.left >= w.left - 1 && td.right <= w.right + 1; });
   ok(vis, `${L}: the tapped Modifier cell is fully in view`);
-  ok(await where(p) === 'mod1@4' && b.h >= b.gh - 1 + b.lh - 1 && b.rowH >= 20 /* Jose 2026-10-19 phone-fit decision, public/js/app.js:34-37: rows 40 → 20 px */, `${L}: tap Modifier code 1 → editing in a 2-line cell (${b.h}px, row ${b.rowH}px; b11 phone-fit rows ≥ 20 px)`);
+  ok(await where(p) === 'mod1@4' && b.h >= b.gh - 1 + b.lh - 1 && b.rowH >= 20 /* the owner 2026-10-19 phone-fit decision, public/js/app.js:34-37: rows 40 → 20 px */, `${L}: tap Modifier code 1 → editing in a 2-line cell (${b.h}px, row ${b.rowH}px; b11 phone-fit rows ≥ 20 px)`);
   await p.keyboard.press('Control+End'); await p.keyboard.type(', surc loci age', { delay: 8 });   // a tap puts the caret where you tap (native); append at the end await p.waitForTimeout(300);
   b = await cellBox(p, 4, 'mod1'); ok(b.sh <= b.h + 1, `${L}: typing more codes: the cell grows, nothing hidden (${b.lines} lines, ${b.h}px)`);
   await shot(p, 'modifiers-editing-390.png');
@@ -220,7 +220,7 @@ async function phone(browser) {
   ok(await p.evaluate(() => document.querySelectorAll('#todayList tbody tr[data-id]').length) === 5 && await p.inputValue(cell(5, 'mod1')) === 'CMGP, TELES' && await p.inputValue(cell(5, 'mod2')) === 'BMI', `${L}: new row saved with its modifiers`);
   await p.evaluate(() => document.activeElement && document.activeElement.blur()); await p.waitForTimeout(500);
   const g5 = await geo(p, 5), b5 = await cellBox(p, 5, 'fee');
-  // QA S2: was the always-true `lines >= 1`; phone-fit rows stay one line and nothing spills (Jose 2026-10-19, public/js/app.js:2242)
+  // QA S2: was the always-true `lines >= 1`; phone-fit rows stay one line and nothing spills (the owner 2026-10-19, public/js/app.js:2242)
   ok(g5.w.fee <= 390 * 0.62 + 1 && b5.lines === 1 && b5.sh <= b5.h + 1, `${L}: on the phone a code column stops at ~60 % of the screen (${g5.w.fee}px); b11 phone fit keeps cells one line (${b5.lines} lines, row ${b5.rowH}px)`);
   const boxes = {}; for (const k of ['fee', 'mod1', 'mod2', 'dx']) boxes[k] = await cellBox(p, 4, k);
   ok(Object.values(boxes).every(x => x.sh <= x.h + 1), `${L}: nothing clipped after editing (${Object.entries(boxes).map(([k, x]) => k + ' ' + x.lines + 'L').join(', ')})`);

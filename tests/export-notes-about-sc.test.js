@@ -1,4 +1,4 @@
-// S-C (Jose, 2026-10-22): billing notes STAY in the exports. The About text must match the actual columns:
+// S-C (the owner, 2026-10-22): billing notes STAY in the exports. The About text must match the actual columns:
 // billing notes always included (billing_note / Billing note column); timestamped notes only with "Include notes".
 // Checks the Excel About sheet against the Entries header, and the Markdown/DOCX/PDF footnote text (shared NOTES_OFF).
 // Run: cd /workspace/pwtest && URL=http://127.0.0.1:PORT/medbilling-logs/ node /workspace/mbl-wt-uibugs/tests/export-notes-about-sc.test.js
@@ -31,7 +31,7 @@ print(json.dumps(out))`;
     let wb = {}; try { wb = JSON.parse(execFileSync('python3', ['-c', PY, f]).toString()); } catch (e) { ok(false, 'xlsx parses: ' + e.message.split('\n')[0]); } fs.unlinkSync(f);
     const ent = wb.Entries || [], head = ent[0] || [], about = (wb.About || []).map(r => r.join(' ')).join('\n');
     const bi = head.indexOf('billing_note');
-    ok(bi > -1 && (ent[1] || []).includes('bill this as 03.03A'), `${k}: Entries has billing_note filled (kept, per Jose) (${bi}: ${JSON.stringify((ent[1] || []).slice(Math.max(0, bi - 1), bi + 2))})`);
+    ok(bi > -1 && (ent[1] || []).includes('bill this as 03.03A'), `${k}: Entries has billing_note filled (kept, per the owner) (${bi}: ${JSON.stringify((ent[1] || []).slice(Math.max(0, bi - 1), bi + 2))})`);
     ok(/Billing notes are included \(column "billing_note"/.test(about), `${k}: About says billing notes are included ("billing_note" column)`);
     ok(!/^Notes are not included/m.test(about), `${k}: About no longer says plain "Notes are not included"`);
     const hasNotes = head.includes('notes');

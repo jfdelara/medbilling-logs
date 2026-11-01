@@ -56,7 +56,7 @@ async function phone(browser) {
   ok(g.pos[0] === 'static' && g.pos[1] === 'static' && g.pos[2] === 'auto', `${L}: Patient name and # are not pinned (td ${g.pos[0]}, # ${g.pos[1]}, header left ${g.pos[2]})`);
   ok(await p.locator('#dispCard').count() === 1 && await p.locator('text=Pin patient column').count() === 0, `${L}: no "Pin patient column" setting`);
   ok(g.w.name <= g.vw * 0.32 + 1 && g.w.name >= 13 * g.chS - 1, `${L}: Patient name column ~30 % of the screen (${Math.round(g.w.name)}px of ${g.vw})`);
-  // Jose 2026-10-19 phone-fit decision, public/js/app.js:34-37: phone rows are 50 % of the 40 px touch height → 20 px (v9i expected ≥ 40)
+  // the owner 2026-10-19 phone-fit decision, public/js/app.js:34-37: phone rows are 50 % of the 40 px touch height → 20 px (v9i expected ≥ 40)
   ok(g.rowH >= 20, `${L}: b11 phone fit: rows are half the touch height, at least 20 px (${g.rowH}px)`);
   const mins = { mrn: 10 * g.chM, fee: 6 * g.chM + 20, dx: 5 * g.chM + 20, tin: 5 * g.chM, tout: 5 * g.chM, min: 4 * g.chM, u: 2 * g.chM };   // b11 phone fit: content-sized columns, Units fits 2 digits
   const short = Object.keys(mins).filter(k => g.w[k] < mins[k]);
@@ -123,7 +123,7 @@ async function phone(browser) {
     return { col: col.style.width, tw: t.style.width, td: Math.round(td.getBoundingClientRect().width), dx: Math.round(dx.getBoundingClientRect().width), ch, sum: Math.round(sum), fs: getComputedStyle(document.documentElement).getPropertyValue('--g-fs').trim() }; });
   for (const idx of [0, 6, 2]) {
     await settings(p); await setSize(p, idx); await today(p); const n = await nw();
-    // b11 phone fit (Jose 2026-10-19, app.js:34-37): notes minimum is FIT.note touch 28 ch × 0.5 = 14 ch on phones (app.js:2102, 2110);
+    // b11 phone fit (the owner 2026-10-19, app.js:34-37): notes minimum is FIT.note touch 28 ch × 0.5 = 14 ch on phones (app.js:2102, 2110);
     // 13 ch here allows for the canvas '0' width vs the app's ch unit (v9j expected ≥ 22 ch before phone fit)
     ok(/px$/.test(n.col) && /px$/.test(n.tw) && Math.abs(parseFloat(n.tw) - n.sum) <= 2 && n.td >= n.dx && n.td >= 13 * n.ch - 1, `${L} v9j: Billing notes has its own px width at ${n.fs} (col ${n.col}, table ${n.tw} = Σ ${n.sum}px; notes ${n.td}px ≥ Dx ${n.dx}px and ≥ 13 ch, b11 phone fit)`);
   }
@@ -166,7 +166,7 @@ async function phone(browser) {
 }
 
 async function desktop(browser) {
-  // v9q: desktop checks at 1920 × 1080 (Jose's office monitor); narrower computer windows are covered by wide-v9q
+  // v9q: desktop checks at 1920 × 1080 (the owner's office monitor); narrower computer windows are covered by wide-v9q
   const L = '1920';
   const p = await setup(browser, { viewport: { width: 1920, height: 1080 } }, L);
   const g = await geo(p);
