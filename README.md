@@ -1,6 +1,6 @@
 # MedBilling Logs ("MB Logs")
 
-Part of Medibrisa. A private, offline time and billing log for physicians: encounter timers,
+Part of Medibrisa Software Ltd. A private, offline time and billing log for physicians: encounter timers,
 arrival/departure (time on site), call-backs, fee codes, photos and reports. Live: https://logs.medibrisa.com/
 
 **It is a personal time and billing log, not the patient's medical record.** Chart every encounter in the patient's chart.

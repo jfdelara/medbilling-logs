@@ -46,7 +46,7 @@ async function run(browser, label, o) {
   ok(r1 >= r0 + 30 && r1 <= r0 + 30, `${label}: scrolling still adds empty rows (${r0} → ${r1}), then stops so the footer can be reached`);
   ok(g.fVisibleInGrid && g.fTop >= g.lastBot - 1, `${label}: after scrolling past the last row the footer shows below it (last row bottom ${g.lastBot}, footer ${g.fTop}–${g.fBot})`);
   ok(g.fBot <= g.wBot + 1, `${label}: the whole footer can be scrolled into view (footer bottom ${g.fBot}, grid bottom ${g.wBot})`);
-  const need = ['Time log only', 'Passcode-locked and encrypted', 'MedBilling Fee Desk', 'Help / User manual', "Part of Medibrisa", '© 2026 MedBilling Logs', 'unit'];
+  const need = ['Time log only', 'Passcode-locked and encrypted', 'MedBilling Fee Desk', 'Help / User manual', "Part of Medibrisa Software Ltd.", '© 2026 Medibrisa Software Ltd.', 'unit'];
   ok(need.every(s => g.txt.includes(s)), `${label}: all footer text kept (${need.filter(s => !g.txt.includes(s)).join(', ') || 'all present'})`);
   ok(Math.abs(g.fW - Math.min(g.wW, 760)) <= 24 || g.fW <= g.wW, `${label}: footer fits the visible grid width (${g.fW} / ${g.wW}px)`);
   await p.screenshot({ path: path.join(OUT, `footer-${label}-scrolled.png`) });
