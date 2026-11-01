@@ -19,7 +19,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); 
         const f = document.querySelector('footer.foot'); if (!f) return { none: true };
         const g = document.querySelector('#todayList .gwrap'); for (let i = 0; i < 12; i++) { if (g && g.offsetParent) g.scrollTop = g.scrollHeight; window.scrollTo(0, document.documentElement.scrollHeight); await new Promise(r => setTimeout(r, 120)); }
         const c = f.querySelector('.copyright'), R = c.getBoundingClientRect(), bar = document.getElementById('tabs').getBoundingClientRect(), cs = getComputedStyle(f);
-        return { shown: cs.display !== 'none' && cs.visibility !== 'hidden' && R.height > 0, inView: R.bottom <= bar.top + 1 && R.top >= 0, link: !!f.querySelector('a[href*="delara-medbilling"]'), man: !!f.querySelector('.manlink') };
+        return { shown: cs.display !== 'none' && cs.visibility !== 'hidden' && R.height > 0, inView: R.bottom <= bar.top + 1 && R.top >= 0, link: !!f.querySelector('a[href*="feedesk.medibrisa.com"]'), man: !!f.querySelector('.manlink') };
       });
       ok(r.shown && r.inView && r.link && r.man, `${vp.width} ${t}: footer (Fee Desk link, manual, ©) reachable above the tab bar ${JSON.stringify(r)}`);
     }
