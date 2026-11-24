@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Regenerate MedBilling Logs' bundled data from a Fee Desk checkout, bump the service-worker cache and mirror public/ to site/.
+"""Regenerate MedBilling Logs' bundled data from a Fee Desk checkout and bump the service-worker cache.
 
     python3 scripts/rebuild-from-feedesk.py --feedesk ../feedesk [--date YYYYMMDD] [--result out.json] [--no-bump]
 
 Used by .github/workflows/feedesk-data-rebuild.yml (triggered by Fee Desk's Friday data update) and runnable by hand.
 Steps: (1) find Fee Desk's data folder (site/data, else public/data); (2) run build-codes.py, build-fees.py, build-icd9.py;
 (3) list the public/data files whose content changed; (4) if any changed: bump `const V` in public/sw.js (the `url-switch` token stays,
-tests/suite-parity.test.js needs it) and mirror public/ into site/ (the Pages workflow publishes site/; the two must stay identical).
+tests/suite-parity.test.js needs it).
+public/ is the app source. site/ is the landing page + privacy + legacy /export/ (kept through 31 Dec 2026) and is not overwritten.
+Published /web/ is assembled from public/ at deploy time by scripts/ci/cf-bundle.py.
 If nothing changed it stops with changed=false and touches nothing else. It never writes into the Fee Desk checkout.
 Held jurisdictions (BC, ON, QC, PE, NB, NS) stay refused by build-codes.py."""
 import argparse, datetime, hashlib, json, os, re, shutil, subprocess, sys
@@ -49,7 +51,7 @@ def bump_sw(date, sw_path=SW):
     return m.group(2) + prev_date + tag + (m.group(5) or ''), new
 
 def mirror(src=PUB, dst=SITE):
-    """Make dst identical to src (keeps dst/.nojekyll if it exists)."""
+    """Make dst identical to src (keeps dst/.nojekyll if it exists). Used by tests; publish uses cf-bundle.py."""
     keep = {'.nojekyll'}
     for dp, dn, fs in os.walk(dst, topdown=False):
         for n in fs:
@@ -68,6 +70,15 @@ def identical(a=PUB, b=SITE):
     sa, sb = snapshot(a), snapshot(b); sb.pop('.nojekyll', None)
     return sorted(set(sa) ^ set(sb)) + sorted(k for k in sa if k in sb and sa[k] != sb[k])
 
+def site_is_landing(site=SITE):
+    """Landing page, privacy policy and legacy /export/ must stay at the published root."""
+    need = ('index.html', 'privacy.html', os.path.join('export', 'index.html'), 'sw.js')
+    missing = [n for n in need if not os.path.isfile(os.path.join(site, n))]
+    if missing: return missing
+    landing = open(os.path.join(site, 'index.html'), encoding='utf-8').read()
+    if 'Get the app' not in landing: return ['index.html is not the Get-the-app landing page']
+    return []
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('--feedesk', required=True, help='path to a Fee Desk checkout')
@@ -76,20 +87,21 @@ def main(argv=None):
     ap.add_argument('--no-bump', action='store_true')
     a = ap.parse_args(argv)
     if not re.fullmatch(r'\d{8}', a.date): die('--date must be YYYYMMDD')
+    land = site_is_landing()
+    if land: die('site/ landing page is missing or damaged: ' + ', '.join(land))
     data = fd_data_dir(os.path.abspath(a.feedesk))
     before = snapshot(os.path.join(PUB, 'data'))
     for cmd in ([sys.executable, 'scripts/build-codes.py', data], [sys.executable, 'scripts/build-fees.py', os.path.join(data, 'codes.json')],
                 [sys.executable, 'scripts/build-icd9.py', data]):
         r = subprocess.run(cmd, cwd=ROOT)
-        if r.returncode: die(f'{os.path.basename(cmd[1])} failed (exit {r.returncode}); nothing was bumped or mirrored')
+        if r.returncode: die(f'{os.path.basename(cmd[1])} failed (exit {r.returncode}); nothing was bumped')
     after = snapshot(os.path.join(PUB, 'data'))
     changed = sorted(k for k in after if before.get(k) != after[k]) + sorted(k for k in before if k not in after)
     res = {'changed': bool(changed), 'files': changed, 'feedesk_data': data, 'sw_before': None, 'sw_after': None}
     if changed and not a.no_bump:
         res['sw_before'], res['sw_after'] = bump_sw(a.date)
-        mirror()
-        diff = identical()
-        if diff: die('public/ and site/ differ after mirroring: ' + ', '.join(diff))
+        land = site_is_landing()
+        if land: die('site/ landing page was damaged: ' + ', '.join(land))
     print(json.dumps(res, indent=1))
     if a.result: json.dump(res, open(a.result, 'w'), indent=1)
     return 0

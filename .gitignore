@@ -1,1 +1,6 @@
 __pycache__/
+dist-cf/
+dist-pages/
+.publish-tmp/
+pwtest/
+

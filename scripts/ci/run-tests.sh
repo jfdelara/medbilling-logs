@@ -10,7 +10,7 @@ cd "$(dirname "$0")/../.."
 mode="${1:-all}"; fails=0
 unit() {
   python3 -m unittest discover -s tests -p 'test_*.py' || fails=$((fails+1))
-  for t in alberta-time-2026 claims-cutoff ew-photo-b11 scan-parse-b11 sex-b11 shared-rowfmt-vendor; do
+  for t in alberta-time-2026 claims-cutoff ew-photo-b11 scan-parse-b11 sex-b11 shared-rowfmt-vendor web-preview; do
     echo "== node tests/$t.test.js"; node "tests/$t.test.js" | tee /tmp/node-$t.log | tail -1
     if [ "${PIPESTATUS[0]}" != 0 ] || grep -q '^FAIL' /tmp/node-$t.log; then fails=$((fails+1)); echo "FAILED: $t"; fi
   done
