@@ -33,11 +33,35 @@ jobs:
             git push origin HEAD:main
           fi
           test -f site/index.html
-      - name: Push site/ to pages-src and gh-pages branches
+      - name: Assemble published site (landing + /export/ + /web/)
         run: |
           set -euo pipefail
-          touch site/.nojekyll
-          git add -A site && (git diff --cached --quiet || (git commit -m "Add .nojekyll" && git push origin HEAD:main))
-          git subtree split --prefix site -b pages-tmp
-          git push -f origin pages-tmp:refs/heads/pages-src
-          git push -f origin pages-tmp:refs/heads/gh-pages
+          python3 scripts/ci/cf-bundle.py --src public --site site --out dist-pages --no-sw-patch
+          test -f dist-pages/index.html
+          test -f dist-pages/privacy.html
+          test -f dist-pages/export/index.html
+          test -f dist-pages/web/index.html
+          test -f dist-pages/web/js/web-preview.js
+      - name: Push assembled site to pages-src and gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf .publish-tmp
+          mkdir .publish-tmp
+          cp -a dist-pages/. .publish-tmp/
+          git -C .publish-tmp init
+          git -C .publish-tmp checkout -b pages-tmp
+          git -C .publish-tmp add -A
+          git -C .publish-tmp -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Publish assembled MedBilling Logs site"
+          git -C .publish-tmp remote add origin "$(git remote get-url origin)"
+          AUTH=$(git config --get http.https://github.com/.extraheader || true)
+          if [ -n "$AUTH" ]; then
+            git -C .publish-tmp -c http.https://github.com/.extraheader="$AUTH" push -f origin pages-tmp:refs/heads/pages-src
+            git -C .publish-tmp -c http.https://github.com/.extraheader="$AUTH" push -f origin pages-tmp:refs/heads/gh-pages
+          else
+            git -C .publish-tmp push -f origin pages-tmp:refs/heads/pages-src
+            git -C .publish-tmp push -f origin pages-tmp:refs/heads/gh-pages
+          fi

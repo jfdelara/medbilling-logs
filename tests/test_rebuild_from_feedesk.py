@@ -41,8 +41,10 @@ class MirrorAndSnapshot(unittest.TestCase):
         self.assertEqual(rb.identical(a, b), []); self.assertTrue(os.path.exists(os.path.join(b, '.nojekyll'))); self.assertFalse(os.path.exists(os.path.join(b, 'gone.js')))
     def test_snapshot_detects_change(self):
         d = tempfile.mkdtemp(); write(os.path.join(d, 'a.json'), '1'); s1 = rb.snapshot(d); write(os.path.join(d, 'a.json'), '2'); self.assertNotEqual(s1, rb.snapshot(d))
-    def test_repo_public_and_site_are_identical(self):
-        self.assertEqual(rb.identical(), [])
+    def test_repo_site_is_landing_not_the_app(self):
+        miss = rb.site_is_landing()
+        self.assertEqual(miss, [], miss)
+        self.assertTrue(rb.identical(), 'public/ (app) and site/ (landing) must differ')
 
 class FeeDeskDir(unittest.TestCase):
     def mk(self, sub, files):
@@ -64,9 +66,24 @@ class CfBundle(unittest.TestCase):
         self.assertIn('r.redirected ? new Response(await r.blob()', out); self.assertIn('if (res.redirected) res = new Response(await res.blob()', out)
     def test_fails_when_pattern_missing(self):
         with self.assertRaises(SystemExit): cf.patch_sw('no patterns here')
-    def test_build_copies_public_and_leaves_source(self):
-        d = tempfile.mkdtemp(); out = cf.build(os.path.join(ROOT, 'public'), os.path.join(d, 'o'))
-        self.assertTrue(os.path.exists(os.path.join(out, 'index.html'))); self.assertNotIn('redirected', open(os.path.join(ROOT, 'public', 'sw.js')).read())
+    def test_build_assembles_landing_export_and_web(self):
+        d = tempfile.mkdtemp(); out = cf.build(os.path.join(ROOT, 'public'), os.path.join(d, 'o'), site=os.path.join(ROOT, 'site'))
+        landing = open(os.path.join(out, 'index.html'), encoding='utf-8').read()
+        self.assertIn('Get the app', landing)
+        self.assertTrue(os.path.exists(os.path.join(out, 'privacy.html')))
+        self.assertTrue(os.path.exists(os.path.join(out, 'export', 'index.html')))
+        web = open(os.path.join(out, 'web', 'index.html'), encoding='utf-8').read()
+        self.assertIn('js/web-preview.js', web)
+        self.assertIn('feedesk.medibrisa.com/web/', web)
+        self.assertIn('redirected', open(os.path.join(out, 'web', 'sw.js'), encoding='utf-8').read())
+        self.assertNotIn('redirected', open(os.path.join(out, 'sw.js'), encoding='utf-8').read())
+        self.assertTrue(os.path.exists(os.path.join(out, '_headers')))
+        self.assertNotIn('redirected', open(os.path.join(ROOT, 'public', 'sw.js'), encoding='utf-8').read())
+    def test_pages_build_skips_sw_patch(self):
+        d = tempfile.mkdtemp(); out = cf.build(os.path.join(ROOT, 'public'), os.path.join(d, 'p'), site=os.path.join(ROOT, 'site'), patch=False)
+        self.assertTrue(os.path.exists(os.path.join(out, 'web', 'index.html')))
+        self.assertNotIn('redirected', open(os.path.join(out, 'web', 'sw.js'), encoding='utf-8').read())
+        self.assertFalse(os.path.exists(os.path.join(out, '_headers')))
 
 class HeldJurisdictions(unittest.TestCase):
     def test_committed_logs_index_publishes_no_held_jurisdiction_data(self):

@@ -58,10 +58,13 @@
   const codeCache = {};    // prov -> {meta, codes, index, byNorm}
   // MedBilling Fee Desk (companion app). Deep links carry only a code that exists in the bundled lists (never free text,
   // so no patient identifier can end up in a URL): #/code/<fee code> and #/medres/<ICD-9 code> are Fee Desk's own routes.
-  const FD_ABS = 'https://feedesk.medibrisa.com/';
+  const FD_ABS = 'https://feedesk.medibrisa.com/web/';
   const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-  // the web app and Fee Desk share one origin (GitHub Pages): resolve Fee Desk next to this app, so a local copy pairs with a local Fee Desk
-  const FD = !NATIVE && /^https?:$/.test(location.protocol) && /\/medbilling-logs\//.test(location.pathname) ? new URL('../feedesk/', location.origin + location.pathname.replace(/[^/]*$/, '')).href : FD_ABS;
+  // Local tests serve this app at /medbilling-logs/ next to /feedesk/. The published /web/ preview always uses the live Fee Desk web app.
+  const onWebPreview = /(?:^|\/)web(?:\/|$)/.test(location.pathname);
+  const FD = !NATIVE && !onWebPreview && /^https?:$/.test(location.protocol) && /\/medbilling-logs\//.test(location.pathname) ? new URL('../feedesk/', location.origin + location.pathname.replace(/[^/]*$/, '')).href : FD_ABS;
+  const wpFrozen = () => !!(window.MBWebPreview && window.MBWebPreview.frozen && window.MBWebPreview.frozen());
+  const wpBlock = (msg) => { toast(msg || 'This free web preview has ended. Export your local entries, then get the app at medibrisa.com.'); return true; };
   let ICD = null;          // {meta, list, by, index} (Alberta Health ICD-9 list from Fee Desk, bundled)
   // v9 patient fields (encrypted with the entry). Never put name/MRN in URLs or console logs.
   const ptName = e => R.ptName(e);
@@ -83,7 +86,8 @@
     if (!has && had && !msg) msg = `This browser removed the app's saved data for this site (last used ${had}). Your passcode and logs were kept only in this browser's storage; restore from your encrypted backup after creating a new passcode.`;
     $('#setupForm').hidden = has; $('#unlockForm').hidden = !has; $('#lockMsg').textContent = msg || '';
     const auto = !showLock.booted || document.visibilityState === 'hidden'; showLock.booted = true;
-    if (!has) { kindUi(); setTimeout(() => $('#sPass').focus(), 50); return; }
+    if (window.MBWebPreview && window.MBWebPreview.apply) window.MBWebPreview.apply();
+    if (!has) { if (wpFrozen()) return; kindUi(); setTimeout(() => $('#sPass').focus(), 50); return; }
     unlockUi();
     // v9p: Face ID (app) / passkey (web) is the default: it prompts by itself, so don't raise the keyboard under it;
     // the passcode field gets the focus only when there is no easy unlock, or after it is cancelled or fails
@@ -107,7 +111,8 @@
     dispApply(); placeFoot(); showLock(msg || 'Locked.');
   }
   $('#setupForm').addEventListener('submit', async ev => {
-    ev.preventDefault(); const a = $('#sPass').value, b = $('#sPass2').value, err = $('#sErr'), kind = sKind();
+    ev.preventDefault(); if (wpFrozen()) return wpBlock();
+    const a = $('#sPass').value, b = $('#sPass2').value, err = $('#sErr'), kind = sKind();
     const bad = loginCheck(kind, a); if (bad) return err.textContent = bad;
     if (a !== b) return err.textContent = kind === 'pin' ? 'The passcodes do not match.' : 'The passphrases do not match.';
     if (!$('#sAck').checked) return err.textContent = 'Please confirm you understand the warning.';
@@ -320,6 +325,7 @@
     if (first) { settings.created = Date.now(); settings.respAccepted = Date.now(); await V.saveSettings(settings); }
     quickSet = settings.defSetting; lastAct = Date.now();
     document.body.classList.remove('locked'); window.scrollTo(0, 0);
+    if (window.MBWebPreview && window.MBWebPreview.apply) window.MBWebPreview.apply();
     R.setHolidays({ off: settings.holOff, extra: settings.holExtra });
     $('#defSetting').value = settings.defSetting; $('#autolock').value = String(settings.autolock); $('#warnA').value = String(settings.warnA); $('#warnR').value = String(settings.warnR);
     fillProv($('#defProv'), settings.prov); euRender(); await undoLoad();
@@ -367,6 +373,7 @@
 
   // ------------------------------------------------------------ persistence
   async function saveEnc(e, action, note, quiet) {
+    if (wpFrozen()) { if (!quiet) wpBlock(); return; }
     const i = S.encs.findIndex(x => x.id === e.id), before = i < 0 ? null : clone(S.encs[i]);
     premDirty(before); premDirty(e);   // v9o: time-premium counts to re-check
     e.kind = kindOf(e); e.updated = Date.now();
@@ -380,6 +387,7 @@
   }
   // defer: keep the photos for a few seconds so Undo can bring the entry back whole (removed on timeout or lock)
   async function deleteEnc(e, note, defer) {
+    if (wpFrozen()) { wpBlock(); return []; }
     const before = S.encs.find(x => x.id === e.id), ph = (before && before.photos) || [];
     if (!defer) for (const p of ph) await V.removePhoto(p);
     premDirty(before || e); await V.remove(e.id); S.encs = S.encs.filter(x => x.id !== e.id);
@@ -907,6 +915,7 @@
   }
   const ptOf = f => f === 'name' ? (x => ptName(x) || '') : (x => ptMrn(x) || '');
   function createFromBlank(tr, f, v) {
+    if (wpFrozen()) { wpBlock(); return; }
     if (!S || !String(v || '').trim()) return;
     const key = tr.dataset.key, day = tr.closest('table').dataset.day, id = uid(), set = blankSet[key] || quickSet;
     if ((f === 'tin' || f === 'tout') && !parseHm(v)) { toast('Type a 24-hour time such as 09:30 or 930, or "now"', 3500); const c = tr.querySelector(`[data-c="${f}"]`); if (c) { c.value = ''; c.defaultValue = ''; } return; }
@@ -929,6 +938,7 @@
   }
   // ↗ on an empty row: the row becomes an encounter first (as if something was typed), so the picked code has a home
   function blankForPick(tr) {
+    if (wpFrozen()) { wpBlock(); return null; }
     if (!S) return null;
     const key = tr.dataset.key, day = tr.closest('table').dataset.day, id = uid(), set = blankSet[key] || quickSet;
     const act = document.activeElement; if (act && act.classList && act.classList.contains('gc') && !tr.contains(act)) commitCell(act);
@@ -947,6 +957,7 @@
     return e;
   }
   function commitCell(c) {
+    if (wpFrozen()) { if (c && c.value !== c.defaultValue) c.value = c.defaultValue; return; }
     if (!c || (c.tagName !== 'INPUT' && c.tagName !== 'TEXTAREA') || !S || c.value === c.defaultValue) return;
     if (c.dataset.c !== 'note' && /[\r\n]/.test(c.value)) c.value = c.value.replace(/[\r\n]+/g, ' ');
     const v = c.value, tr = c.closest('tr'); c.defaultValue = v;
@@ -2334,6 +2345,7 @@
   const pickTok = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
   function fdBack() { fdSince = 0; }
   function pickInFeeDesk(e, kind, at) {
+    if (wpFrozen()) { wpBlock(); return; }
     if (!e || !kind) return;
     const col = kind === 'dx' || kind === 'mod1' || kind === 'mod2' ? kind : 'fee', isMod = col === 'mod1' || col === 'mod2', tok = pickTok();
     const act = document.activeElement; if (act && act.classList && act.classList.contains('gc')) commitCell(act);   // save what was typed first
@@ -3577,7 +3589,7 @@
     const r = await shareFile(file, file.name);
     if (r !== 'cancelled' && S) { S.settings.lastBackup = Date.now(); S.settings.bkSnooze = 0; await saveSettings(); renderRetention(); checkBackupDue(); toast(r === 'shared' ? 'Backup shared' : 'Backup downloaded'); }
   };
-  $('#impAll').onclick = () => { pickStart(); $('#impFile').click(); };
+  $('#impAll').onclick = () => { if (wpFrozen()) return wpBlock(); pickStart(); $('#impFile').click(); };
   $('#impFile').addEventListener('cancel', pickEnd);
   $('#impFile').addEventListener('change', async () => {
     pickEnd(); const f = $('#impFile').files[0]; $('#impFile').value = ''; if (!f || !S) return;
@@ -4638,5 +4650,5 @@
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   Promise.all([loadProvs(), V.dev.load()]).then(() => { lsMigrateDev(); showLock(pickLockMsg()); });
-  window.BLApp = { lockNow };
+  window.BLApp = { lockNow, exportBackup: () => { const b = $('#expAll'); if (b) b.click(); } };
 })();

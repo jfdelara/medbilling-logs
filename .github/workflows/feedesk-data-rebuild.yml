@@ -3,7 +3,7 @@ name: Rebuild Logs data from Fee Desk
 # Fee Desk's Friday data update sends a `feedesk-data-updated` repository_dispatch after it has published new data.
 # repository_dispatch runs only from the default branch, so this does nothing until it is merged.
 # Steps: check out Logs + the Fee Desk commit -> regenerate the Logs data -> run tests -> bump the service-worker cache ->
-# open a PR with the result -> deploy the Cloudflare Pages build (main only).
+# open a PR with the result -> assemble landing + /export/ + /web/ and deploy the Cloudflare Pages build (main only).
 on:
   repository_dispatch:
     types: [feedesk-data-updated]
@@ -57,7 +57,7 @@ jobs:
           ref: ${{ github.event.client_payload.sha || inputs.feedesk_ref }}
           path: feedesk
 
-      - name: Regenerate Logs data, bump the cache, mirror public/ to site/
+      - name: Regenerate Logs data and bump the cache
         id: rebuild
         run: |
           python3 scripts/rebuild-from-feedesk.py --feedesk feedesk --date "$(date -u +%Y%m%d)" --result rebuild-result.json
@@ -75,7 +75,7 @@ jobs:
 
       - name: Build the Cloudflare bundle
         if: steps.rebuild.outputs.changed == 'true'
-        run: python3 scripts/ci/cf-bundle.py --src public --out dist-cf
+        run: python3 scripts/ci/cf-bundle.py --src public --site site --out dist-cf
 
       - name: Commit to a new branch and open a PR
         id: pr
@@ -90,7 +90,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add public site
+          git add public
           git commit -m "Rebuild data from Fee Desk ${fd_sha}: ${sw}"
           git push origin "$branch"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -111,10 +111,10 @@ jobs:
             echo "::error::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets are not set"; exit 1
           fi
           npx --yes wrangler@3 pages deploy dist-cf --project-name medibrisa-logs --branch main --commit-dirty=true
-          want=$(grep -o "const V = '[^']*'" dist-cf/sw.js | head -1)
+          want=$(grep -o "const V = '[^']*'" dist-cf/web/sw.js | head -1)
           for i in 1 2 3 4 5 6; do
-            got=$(curl -fsS "https://logs.medibrisa.com/sw.js?cb=$RANDOM" | grep -o "const V = '[^']*'" | head -1 || true)
+            got=$(curl -fsS "https://logs.medibrisa.com/web/sw.js?cb=$RANDOM" | grep -o "const V = '[^']*'" | head -1 || true)
             [ "$got" = "$want" ] && { echo "live: $got"; exit 0; }
             sleep 10
           done
-          echo "::error::logs.medibrisa.com is not serving $want"; exit 1
+          echo "::error::logs.medibrisa.com/web/ is not serving $want"; exit 1
