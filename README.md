@@ -89,3 +89,5 @@ Test build only; H-Link is not connected and nothing is sent. Approve/Submit (Cl
 ## Source of truth
 This repo holds the newest code (the v13 line). `public/` is the working app. `site/` is the published landing page (`/`), privacy policy, and legacy `/export/` (kept through 31 Dec 2026). The working web app is assembled at `/web/` (`https://logs.medibrisa.com/web/` and `https://jfdelara.github.io/medbilling-logs/web/`). The Cloudflare Pages copy of `web/sw.js` carries the redirect fix (Pages 308s `/index.html`).
 Fee Desk web lookup links from `/web/` go to https://feedesk.medibrisa.com/web/ (constant `FD_ABS` in `public/js/app.js`, plus `public/index.html`). There are no github.io Fee Desk links.
+
+> Medibrisa standing rules: see [MEDIBRISA-RULES.md](MEDIBRISA-RULES.md).
