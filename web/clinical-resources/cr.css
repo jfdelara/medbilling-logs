@@ -1,0 +1,75 @@
+/* Clinical Resources panel + onboarding. Scoped under .crp / .cro*. Uses the host app's font. */
+.crp{--cr-bg:#fff;--cr-fg:#14212b;--cr-mut:#4a5865;--cr-line:#d6dee5;--cr-acc:#0f766e;--cr-acc-bg:#e6f4f2;--cr-sub:#8a4b00;--cr-sub-bg:#fff3e0;color:var(--cr-fg);background:var(--cr-bg);font-size:15px;line-height:1.4;box-sizing:border-box}
+.crp *,.cro *{box-sizing:border-box}
+.crp-page{max-width:1100px;margin:0 auto;padding:12px 16px 24px}
+.crp-head{display:flex;flex-direction:column;gap:10px}
+.crp-title{margin:0;font-size:1.25rem}
+.crp-switch{display:flex;flex-wrap:wrap;gap:10px}
+.crp-switch label{display:flex;flex-direction:column;font-size:.8rem;color:var(--cr-mut);gap:2px;flex:1 1 160px}
+.crp select,.crp input[type=search]{font:inherit;font-size:16px;padding:8px 10px;border:1px solid var(--cr-line);border-radius:8px;background:#fff;color:var(--cr-fg);min-height:40px}
+.crp-search input{width:100%}
+.crp-prompt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--cr-acc-bg);border:1px solid #9fd3cc;padding:8px 10px;border-radius:8px}
+.crp-prompt[hidden],.crp-splab[hidden]{display:none}
+.crp button{font:inherit;cursor:pointer}
+.crp-prompt button{padding:6px 12px;border-radius:6px;border:1px solid var(--cr-acc);background:#fff;color:var(--cr-acc);min-height:36px}
+.crp-prompt .crp-yes{background:var(--cr-acc);color:#fff}
+.crp-tabs{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--cr-line);scrollbar-width:none}
+.crp-tabs button{border:0;background:none;padding:9px 12px;color:var(--cr-mut);border-bottom:3px solid transparent;white-space:nowrap;min-height:40px}
+.crp-tabs button.on{color:var(--cr-acc);border-bottom-color:var(--cr-acc);font-weight:600}
+.crp-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.crp-chip{border:1px solid var(--cr-line);background:#fff;border-radius:999px;padding:5px 11px;font-size:.85rem;color:var(--cr-fg);min-height:32px}
+.crp-chip[aria-pressed=true]{background:var(--cr-acc);border-color:var(--cr-acc);color:#fff}
+.crp-chips select{font-size:.9rem;min-height:32px;padding:4px 8px}
+.crp-chk{font-size:.85rem;display:inline-flex;gap:4px;align-items:center;color:var(--cr-fg)}
+.crp-sec{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--cr-mut);margin:16px 0 6px}
+.crp-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
+.crp-card{border:1px solid var(--cr-line);border-radius:10px;padding:10px 12px;background:#fff}
+.crp-off{opacity:.6}
+.crp-row{display:flex;align-items:flex-start;gap:8px;justify-content:space-between}
+.crp-link{color:var(--cr-acc);font-weight:600;text-decoration:none}
+.crp-link:hover,.crp-link:focus{text-decoration:underline}
+.crp-star{border:0;background:none;font-size:1.25rem;line-height:1;color:#b7791f;padding:2px 4px;min-width:36px;min-height:36px}
+.crp-desc{margin:4px 0;color:var(--cr-mut);font-size:.88rem}
+.crp-caveat{margin:4px 0;font-size:.8rem;color:#7a2e0e;background:#fdf0e8;border-radius:6px;padding:3px 6px}
+.crp-meta{margin:6px 0 0;display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:.75rem}
+.crp-badge{border-radius:5px;padding:1px 6px;background:#eef2f5;color:#33414d}
+.crp-badge.crp-subscription{background:var(--cr-sub-bg);color:var(--cr-sub);font-weight:600}
+.crp-badge.crp-member{background:#eef0ff;color:#3b3f8f}
+.crp-badge.crp-free{background:#e7f6ec;color:#1d6b36}
+.crp-ver{color:var(--cr-mut);margin-left:auto}
+.crp-foot{font-size:.8rem;color:var(--cr-mut);border-top:1px solid var(--cr-line);margin-top:16px;padding-top:8px}
+.crp-empty{color:var(--cr-mut)}
+.crp-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.crp :focus-visible{outline:3px solid #1d4ed8;outline-offset:2px}
+.crp-drawer{padding:10px 12px;font-size:14px}
+.crp-drawer .crp-list{grid-template-columns:1fr}
+.crp-drawer .crp-card{padding:8px 10px}
+@media (max-width:600px){.crp-page{padding:10px}.crp-list{grid-template-columns:1fr}.crp-chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}.crp-chip,.crp-chk{flex:0 0 auto;white-space:nowrap}}
+/* Onboarding */
+.cro-overlay{position:fixed;inset:0;background:rgba(10,20,30,.55);display:flex;align-items:center;justify-content:center;z-index:10000;padding:12px}
+.cro{background:#fff;color:#14212b;border-radius:14px;width:100%;max-width:520px;max-height:100%;overflow:auto;box-shadow:0 20px 50px rgba(0,0,0,.3);font-size:15px}
+.cro-in{padding:18px 20px}
+.cro h2{margin:0 0 10px;font-size:1.2rem}
+.cro-prog{height:6px;background:#e3e9ee;border-radius:3px;overflow:hidden}
+.cro-prog i{display:block;height:100%;background:#0f766e;transition:width .2s}
+.cro-step{font-size:.8rem;color:#4a5865;margin:6px 0 12px}
+.cro-lead{margin:0 0 12px;color:#33414d}
+.cro-f{display:flex;flex-direction:column;gap:3px;margin:0 0 12px;border:0;padding:0;font-size:.85rem;color:#4a5865}
+.cro-f legend{padding:0;margin-bottom:6px}
+.cro-f select,.cro-f input{font:inherit;font-size:16px;padding:9px 10px;border:1px solid #c5d0d9;border-radius:8px;color:#14212b;background:#fff;min-height:42px}
+.cro-spwrap[hidden]{display:none}
+.cro-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.cro .cro-c{display:flex;gap:6px;align-items:center;font-size:.9rem;color:#14212b;margin:0;padding:3px 0;min-height:0;line-height:1.3}
+.cro .cro-c input{margin:0;width:18px;height:18px;flex:0 0 auto}
+.cro-sw{margin:4px 0 8px}
+.cro-sum{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0 0 10px}
+.cro-sum dt{color:#4a5865}.cro-sum dd{margin:0;font-weight:600}
+.cro-note{font-size:.8rem;color:#4a5865}
+.cro-btns{display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap}
+.cro-gap{flex:1}
+.cro-btns button{font:inherit;padding:10px 16px;border-radius:8px;border:1px solid #0f766e;background:#0f766e;color:#fff;min-height:44px;cursor:pointer}
+.cro-btns .cro-ghost{background:#fff;color:#0f766e}
+.cro :focus-visible{outline:3px solid #1d4ed8;outline-offset:2px}
+.cro-banner{background:#e6f4f2;border:1px solid #9fd3cc;color:#14212b;padding:8px 12px;border-radius:8px;margin:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.9rem}
+.cro-banner button{font:inherit;border:1px solid #0f766e;background:#fff;color:#0f766e;border-radius:6px;padding:4px 10px}
+@media (max-width:600px){.cro-grid{grid-template-columns:1fr 1fr;gap:4px 8px}.cro .cro-c{font-size:.85rem}.cro-in{padding:14px}}

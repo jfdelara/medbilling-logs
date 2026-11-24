@@ -1,0 +1,143 @@
+/* Shared favourites row (Fee Desk 743c42e savedRow styles, scoped under .fdfav). Source of truth: Fee Desk public/css/app.css.
+   Prototype: extracted mechanically; the real slice moves these rules here and has Fee Desk import this file too. */
+.fdfav{--teal:#0f766e;--teal-d:#115e59;--teal-l:#ccfbf1;--bg:#eef1f4;--card:#fff;--ink:#1f2933;--muted:#64748b;--line:#d9dee5;--fee:#ea580c;--r:12px;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink)}
+.fdfav .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;color:var(--teal-d)}
+.fdfav .muted{color:var(--muted)}.fdfav .small{font-size:.85rem}
+.fdfav .inputwrap{position:relative;flex:1}.fdfav .inputwrap input{width:100%;box-sizing:border-box;padding:12px 40px 12px 12px;border:1px solid var(--line);border-radius:var(--r);background:#fff;font-size:16px}
+.fdfav .savedh h3{margin:.6em 0 .3em;font-size:1.05rem}
+.fdfav .card,.fdfav .detail,.fdfav .hit{background:var(--card);border-radius:var(--r);box-shadow:0 1px 2px rgba(15,23,42,.06)}
+.fdfav .hit{padding:10px 12px;border:1px solid transparent;cursor:pointer;text-align:left;width:100%;color:inherit;font:inherit}
+.fdfav .hit.sel{border-color:var(--teal)}
+.fdfav .hit .row1{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.fdfav .fee{color:var(--fee);font-weight:700;white-space:nowrap}
+.fdfav .detail,.fdfav .hit,.fdfav .rule{overflow-wrap:anywhere}
+.fdfav html.phone .hit .score{display:none}
+.fdfav html.phone .hit{padding:12px 14px}
+.fdfav html.phone .hit .hdesc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--ink)}
+.fdfav .pfee .fee.big{font-size:2rem;font-weight:700;line-height:1.1}
+.fdfav .star{display:inline-flex;align-items:center;justify-content:center;min-width:30px;min-height:30px;padding:0 2px;font-size:1.2rem;line-height:1;color:#94a3b8;cursor:pointer;border-radius:8px;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;vertical-align:middle}
+.fdfav .star.on{color:#d97706}
+@media (hover:hover){.fdfav .star:hover{background:rgba(15,118,110,.08)}}
+.fdfav .star:focus-visible{outline:2px solid var(--teal);outline-offset:1px}
+.fdfav .codebig+.star{font-size:1.5rem;min-width:40px;min-height:40px}
+.fdfav .hit .lft{display:inline-flex;align-items:center;gap:2px}
+.fdfav .savedh{display:flex;justify-content:space-between;align-items:center;margin:8px 4px 0}
+.fdfav .savedh h3{margin:0;font-size:1rem}
+.fdfav .savedhelp{margin:0;line-height:1.45;color:var(--ink);max-width:62ch}
+.fdfav .hit.other{opacity:.92;border-style:dashed}
+.fdfav .saverow .savedhelp{line-height:1.35}
+.fdfav /* v26 compact Favourites / Recent rows */
+.hit.compact,.fdfav #results .hit.compact{display:flex;align-items:center;gap:8px;padding:2px 4px 2px 10px;min-height:34px}
+.fdfav .hit.compact .ccode{flex:0 0 auto;font-weight:700}
+.fdfav .hit.compact .cdesc{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+.fdfav .hit.compact .fee,.fdfav .hit.compact .badge,.fdfav .hit.compact .muted{flex:0 0 auto;white-space:nowrap;font-size:.85rem}
+.fdfav .hit.compact .star{flex:0 0 auto;min-width:32px;min-height:32px;font-size:1.2rem}
+.fdfav .hit.heldsaved{display:flex;align-items:center;gap:10px;cursor:default;color:var(--muted,#64748b);font-size:.85rem}
+.fdfav .hit.heldsaved .cdesc{white-space:normal}
+.fdfav .hit.heldsaved .linkbtn{margin-left:auto;flex:0 0 auto}
+.fdfav html.picking #results .hit:not(.other):not(.heldsaved):hover,.fdfav html.picking .icdrow:hover{outline:2px solid #f59e0b;outline-offset:-2px}
+.fdfav /* v34 Favourites groups: collapsible folders (specialty,.fdfav doctor,.fdfav custom) + Ungrouped; sheets for choosing groups */
+#results .hit[hidden],.fdfav .fgopt[hidden]{display:none!important}
+.fdfav .fgnew:focus-visible,.fdfav .fgtoggle:focus-visible,.fdfav .fgmenu:focus-visible,.fdfav .rowmenu:focus-visible,.fdfav .fgitem:focus-visible,.fdfav .fgsegb:focus-visible{outline:2px solid var(--teal);outline-offset:1px}
+.fdfav .favtools{display:flex;align-items:center;gap:8px;margin:6px 4px 2px;flex-wrap:wrap}
+.fdfav .favtools .fgq{flex:1 1 180px}
+.fdfav .fghint{margin:2px 6px 4px;line-height:1.35}
+.fdfav .fgbody>.hit,.fdfav #results .fgbody>.hit.compact{border:0;border-bottom:1px solid #f1f4f7;border-radius:0;background:transparent;box-shadow:none;min-height:40px}
+.fdfav .fgbody>.hit:last-child{border-bottom:0}
+.fdfav .fgbody>.hit.sel{background:#e6f3f2}
+.fdfav .rowmenu{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:32px;border-radius:8px;color:var(--teal-d);font-size:1.15rem;line-height:1;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+@media (hover:hover){.fdfav .rowmenu:hover{background:rgba(15,118,110,.08)}}
+.fdfav html.phone .fgbody>.hit,.fdfav html.phone #results .fgbody>.hit.compact{min-height:44px}
+.fdfav html.phone .fgbody .star,.fdfav html.phone .fgbody .rowmenu{min-width:44px;min-height:44px}
+@media (pointer:coarse){.fdfav .fgbody>.hit,.fdfav #results .fgbody>.hit.compact{min-height:44px}.fdfav .fgbody .star,.fdfav .fgbody .rowmenu{min-width:44px;min-height:44px}}
+@media (max-width:480px){.fdfav .favtools .fgq{flex:1 1 150px}}
+.fdfav .fgtoggle,.fdfav .fgmenu,.fdfav .rowmenu,.fdfav .fgnew,.fdfav .fgitem,.fdfav .fgopt,.fdfav .fgsegb{-webkit-tap-highlight-color:rgba(15,118,110,.12)}
+.fdfav /* default (narrow list column on desktop,.fdfav phones): the linked codes sit on a second line under the code,.fdfav two chips per line */
+.hit.compact.haslinks{flex-wrap:wrap;row-gap:2px}
+.fdfav .hit.compact.haslinks .cdesc{flex:1 1 0}
+.fdfav .hit.compact .lnks{order:9;flex:1 0 100%;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;padding:0 0 4px}
+.fdfav .lnkic{flex:0 0 auto;color:var(--muted);font-size:.8rem}
+.fdfav .lchip{position:relative;flex:0 1 auto;min-width:0;display:inline-flex;align-items:center;gap:4px;max-width:calc(50% - 38px);min-height:26px;padding:1px 8px;border:1px solid #99d6cf;border-radius:999px;background:#effaf8;color:var(--ink);font-size:.78rem;line-height:1.2;white-space:nowrap;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:rgba(15,118,110,.12)}
+.fdfav .lchip .code{flex:0 0 auto;font-size:.78rem}
+.fdfav .lchip .ld{min-width:0;overflow:hidden;text-overflow:ellipsis;color:#334155;font-weight:400}
+.fdfav .lchip.k-H{border-color:#fdba74;background:#fff7ed}
+.fdfav .lchip.k-H .code{color:#9a3412}
+.fdfav .lchip.ledit{flex:0 0 auto;padding:1px 9px;border-style:dashed;background:#fff;color:var(--teal-d);font-size:.85rem}
+.fdfav .lchip.static{cursor:default;max-width:100%}
+.fdfav .lchip:focus-visible{outline:2px solid var(--teal);outline-offset:1px}
+@media (hover:hover){.fdfav .lchip:not(.static):hover{filter:brightness(.96)}}
+.fdfav html.phone .lchip,.fdfav html.phone .lchip .code{font-size:.82rem}
+.fdfav html.phone .lchip{min-height:34px}
+.fdfav html.phone .lchip::after{content:'';position:absolute;inset:-5px -2px}
+@media (pointer:coarse){.fdfav .lchip{min-height:34px}.fdfav .lchip::after{content:'';position:absolute;inset:-5px -2px}}
+.fdfav .fgbody>.hit.compact.haslinks,.fdfav #results .hit.compact.haslinks{padding-top:4px;padding-bottom:4px}
+.fdfav .hit.compact .psel{width:28px;height:28px;margin-left:4px}
+.fdfav .lchip.k-M{border-color:#c4b5fd;background:#f5f3ff}
+.fdfav .lchip.k-M .code{color:#5b21b6}
+.fdfav #results .hit.gmod .ccode{color:#5b21b6}
+.fdfav /* v39 slim Favourites (the owner Oct 9): every favourite is ONE line: code · description … · linked chips · fee · ★ · ⋯.
+   The description truncates first; only the linked chips wrap (inside their own box) when they really don't fit.
+   Chips show just the code in a narrow list and code + short title when the list is wide. */
+.hit.compact.haslinks,.fdfav #results .hit.compact.haslinks{flex-wrap:nowrap;row-gap:0;padding-top:2px;padding-bottom:2px}
+.fdfav .hit.compact.haslinks .cdesc{flex:1 1 3em;min-width:2.5em}
+.fdfav .hit.compact .lnks{order:0;flex:0 1 auto;min-width:0;max-width:none;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:3px 4px;padding:0;overflow:visible}
+.fdfav .hit.compact .lnkic{display:none}
+.fdfav .hit.compact .lchip{flex:0 0 auto;max-width:none;min-height:22px;padding:0 6px;gap:3px;font-size:.74rem;line-height:1.15}
+.fdfav .hit.compact .lchip .code{font-size:.74rem}
+.fdfav .hit.compact .lchip .ld{display:none}
+.fdfav .hit.compact .lchip.ledit{padding:0 6px;font-size:.78rem}
+.fdfav .hit.compact .lchip::after{content:'';position:absolute;inset:-6px -2px}
+.fdfav html.phone .hit.compact .lchip,.fdfav html.phone .hit.compact .lchip .code{font-size:.78rem}
+.fdfav html.phone .hit.compact .lchip{min-height:28px}
+@media (pointer:coarse){.fdfav .hit.compact .lchip{min-height:28px}.fdfav .hit.compact .lchip::after{inset:-8px -2px}}
+.fdfav #results .fgbody>.hit.compact{min-height:38px}
+.fdfav html.phone .hit.compact .lchip{min-height:24px;padding:0 4px}
+.fdfav html.phone .hit.compact .lchip::after{inset:-10px -1px}
+@media (pointer:coarse){.fdfav .hit.compact .lchip{min-height:24px}.fdfav .hit.compact .lchip::after{inset:-10px -1px}}
+.fdfav /* v42 code-first rows: code · short label · price · [ICD-9] */
+.hit .lft{min-width:0}
+.fdfav .hit .hshort{margin:0 6px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.fdfav .hit.compact .fee{flex:0 0 auto}
+.fdfav .hit.compact.codefirst .lnks{flex-wrap:nowrap;overflow:hidden}
+.fdfav .hit.compact.codefirst .lchip{min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fdfav /* v42 S4: short labels never truncate; the chips give way and take the ellipsis */
+.hit.compact .cdesc.short{flex:0 0 auto;overflow:visible;text-overflow:clip}
+@media (max-width:600px){.fdfav .hit.compact .cdesc.short{flex:0 1 auto;min-width:min-content;white-space:normal;overflow-wrap:normal;word-break:keep-all;line-height:1.2}}
+.fdfav .hit.compact .cdesc.short~.lnks{flex:0 1 auto;min-width:0;max-width:none;flex-wrap:nowrap;overflow:hidden}
+.fdfav .hit.compact .cdesc.short~.lnks .lchip{min-width:1.5em;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fdfav .hit .row1 .code{flex:0 0 auto;white-space:nowrap}
+.fdfav .hit .hshort{flex:0 1 auto;min-width:min-content;overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:normal;word-break:keep-all}
+@media (max-width:600px){.fdfav .hit .row1{flex-wrap:wrap;row-gap:2px}.fdfav .hit .row1 .lft{min-width:auto;flex:0 1 auto}.fdfav .hit .hshort{white-space:nowrap}}
+.fdfav /* pick-safe search cards: the ☆ star and the pick-mode "Details" pill sit on the card edge with their own >=44px hit areas,.fdfav so a tap anywhere else on the card (incl. its centre) is the row itself -> in pick mode it always returns the pick */
+#results .hit:not(.compact){position:relative;padding-right:52px;min-height:88px}
+.fdfav #results .hit:not(.compact) .star{position:absolute;top:0;right:0;width:48px;height:44px;margin:0;display:flex;align-items:center;justify-content:center;z-index:1}
+.fdfav #results .hit:not(.compact) .pdet{position:absolute;right:4px;bottom:4px;margin:0;min-height:44px;min-width:44px;justify-content:center;z-index:1}
+.fdfav #results .hit:not(.compact):has(.pdet){padding-bottom:52px}
+@media (max-width:600px){.fdfav html.picking #results .hit.compact{flex-wrap:wrap;row-gap:2px;max-width:100%;min-width:0}.fdfav html.picking #results .hit.compact .cdesc.short{min-width:0;flex:1 1 auto}}
+.fdfav .fee.lkp{flex:0 0 auto;font-size:.82rem;font-weight:700;white-space:nowrap;color:var(--ink);margin-left:auto}
+.fdfav /* v44 (the owner OK 2026-10-22): search cards show no full-description line. .hdesc stays in the DOM (aria-hidden; the full text is in
+   the card's aria-label and the label's title) as an invisible layer under the row,.fdfav so a tap on it is still the card itself
+   (MedBilling Logs multipick-v9l taps .hdesc). row1 sits above it so ☆,.fdfav ＋ and Details stay reachable. */
+#results .hit:not(.compact) .hdesc,.fdfav html.phone #results .hit:not(.compact) .hdesc{position:absolute;inset:0;display:block;opacity:0;overflow:hidden;color:transparent;pointer-events:none;margin:0;padding:0}
+.fdfav /* M1-d: a linked chip never shrinks below its full code. The chip is a two-column grid (code | label) whose minimum is the code
+   alone (label column minmax(0,.fdfav …)),.fdfav so on narrow lists (360/375/390) only the label takes the ellipsis,.fdfav never the code */
+.hit.compact .lchip[data-lk]{display:inline-grid;grid-auto-flow:column;grid-template-columns:max-content minmax(0,max-content);align-items:center;min-width:min-content!important;text-overflow:clip}
+.fdfav .hit.compact .lchip[data-lk] .code{white-space:nowrap}
+.fdfav .hit.compact .lchip[data-lk] .ld{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fdfav .hit.compact .lnks:has(.lchip[data-lk]){min-width:min-content!important;flex-shrink:40}
+.fdfav #results .hit.nope{animation:mbnope .45s ease;box-shadow:0 0 0 2px #dc2626 inset;background:#fef2f2}
+@media (prefers-reduced-motion:reduce){.fdfav #results .hit.nope{animation:none}}
+.fdfav /* M1-e: chip codes keep their full width,.fdfav so on tight rows the short description gives way: at most two lines
+   (ellipsis on the second),.fdfav never three,.fdfav keeping slim rows (≤46/50px phone,.fdfav ≤40px desktop column) */
+.hit.compact.haslinks .cdesc.short{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+
+/* suite parity v1: pane controls styled exactly as Fee Desk (css/app.css .fgnew, .savedtools, .saverow, .savedhelp) */
+.fdfav .fgnew{display:inline-flex;align-items:center;min-height:36px;padding:0 12px;border:1px solid var(--teal,#0f766e);border-radius:999px;background:#fff;color:var(--teal-d,#115e59);font-size:.85rem;font-weight:600;cursor:pointer;touch-action:manipulation}
+@media (pointer:coarse){.fdfav .fgnew{min-height:44px}}
+.fdfav .fghint[hidden]{display:none}
+.fdfav .savedtools{display:flex;flex-direction:column;gap:6px;margin:6px 4px 0}
+.fdfav .saverow{display:flex;align-items:center;gap:10px;margin:0}
+.fdfav .savedhelp{margin:0;line-height:1.35;max-width:62ch}
+.fdfav .savedtools .ghost{position:relative;flex:0 0 auto;font-size:.75rem;line-height:1.2;padding:3px 8px;border-radius:6px;min-height:0;min-width:52px;text-align:center}
+.fdfav .savedtools .ghost::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,44px);height:max(100%,32px);transform:translate(-50%,-50%)}
+@media (max-width:420px){.fdfav .saverow{flex-direction:column;align-items:flex-start;gap:4px}.fdfav .saverow+.saverow{margin-top:6px}}

@@ -1,0 +1,22 @@
+/* Free /web/ preview banner and expired notice. Loaded only with the web app shell. */
+.wp-banner{position:relative;z-index:80;background:#e8f4f2;color:#1f4f4a;font-size:.82rem;line-height:1.4;padding:7px 14px;text-align:center;border-bottom:1px solid #c9dedb}
+.wp-banner p{margin:0 auto;max-width:52rem}
+.wp-banner a{color:#115e59;font-weight:600}
+html.wp-preview .wp-banner{padding-top:calc(7px + env(safe-area-inset-top))}
+body.locked .wp-banner{padding-top:7px}
+
+.wp-expired{position:relative;z-index:90;display:flex;justify-content:center;padding:10px 12px 0;background:transparent}
+html.wp-preview .wp-expired{padding-top:calc(10px + env(safe-area-inset-top))}
+body.locked .wp-expired{padding-top:10px}
+.wp-expired-card{background:#fff;border:1px solid #c9dedb;border-radius:14px;box-shadow:0 4px 18px rgba(15,23,42,.08);padding:16px 18px;max-width:36rem;width:100%;text-align:left;color:#1f2933}
+.wp-expired-card h2{margin:0 0 8px;font-size:1.05rem;color:#115e59}
+.wp-expired-card p{margin:0 0 8px;font-size:.88rem;line-height:1.45}
+.wp-expired-card a{color:#115e59;font-weight:600}
+.wp-export{display:inline-block;background:#0f766e;color:#fff;border:0;border-radius:10px;padding:10px 16px;font:700 .9rem/1.2 inherit;cursor:pointer;margin:6px 0 4px;min-height:40px}
+.wp-export:hover{background:#115e59}
+.wp-muted{color:#64748b;font-size:.8rem!important}
+
+html.wp-expired #setupForm{display:none!important}
+html.wp-expired #main input.gc,html.wp-expired #main textarea.gc{pointer-events:none;background:#f3f5f6}
+html.wp-expired #cbBtn,html.wp-expired #manualBtn,html.wp-expired #impAll,html.wp-expired #mvImport,html.wp-expired #eNoteAdd,html.wp-expired #eaEdit,html.wp-expired #eaSame,html.wp-expired #eaTime{pointer-events:none;opacity:.45}
+html.wp-expired #tbar .acts,html.wp-expired #ewSave,html.wp-expired #ewApv{pointer-events:none;opacity:.45}
